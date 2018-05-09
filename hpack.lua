@@ -116,10 +116,11 @@ local function serialize(self, header_list)
   for name, value in pairs(header_list) do
     table.insert(header_block, add(self, name, value, huffman))
   end
-  return header_block
+  return table.concat(header_block)
 end
 
-local function decode(fragment)
+local function decode(header_block)
+
 end
 
 add_static_table( 1, ":authority")
