@@ -2,6 +2,63 @@ local static_table = {}
 local dynamic_table = {}
 local fd = io.open("dump.bin", "w")
 
+local function new(HEADER_TABLE_SIZE)
+  local self = {
+    dynamic_table = {},
+    dynamic_table_size = 0,
+    maxsize = HEADER_TABLE_SIZE or 0,
+    dynamic_table_maxsize = nil,
+    dynamic_table_head = 1,
+    dynamic_table_tail = 0,
+    dynamic_names_to_indexes = {}
+  }
+  self.dynamic_table_maxsize = self.maxsize
+  return self
+end
+
+local function evict(self)
+  local old_head = self.dynamic_table_head
+  if old_head > self.dynamic_table_tail then return false end -- can it happen?
+  local pair = self.dynamic_table[old_head]
+  if self.dynamic_table[pair] == old_head then -- don't want to evict a duplicate entry (2.3.2)
+    self.dynamic_table[pair] = nil
+  end
+  self.dynamic_table[old_head] = nil
+  local name = self.dynamic_names_to_indexes[old_head]
+  if name ~= nil then
+    if self.dynamic_names_to_indexes[name] == old_head then
+      self.dynamic_names_to_indexes[name] = nil
+    end
+    self.dynamic_names_to_indexes[old_head] = nil
+  end
+  local old_entry_size = dynamic_table_entry_size(pair)
+  self.dynamic_table_size = self.dynamic_table_size - old_entry_size
+  if self.dynamic_table_size == 0 then
+    -- [Premature Optimisation]: reset to head at 1 and tail at 0
+    self.dynamic_table_head = 1
+    self.dynamic_table_tail = 0
+  else
+    self.dynamic_table_head = old_head + 1
+  end
+  return true
+end
+
+
+local function add_dynamic_table(self, name, value, bin)
+  local new_entry_size = 24 + #bin
+  -- 4.4. Entry Eviction When Adding New Entries
+  while self.dynamic_table_size > self.dynamic_table_maxsize - new_entry_size do
+    if not evict(self) then return end
+  end
+  local tail = self.dynamic_table_tail + 1
+  self.dynamic_table_tail = tail
+  self.dynamic_table[bin] = tail
+  self.dynamic_table[tail] = bin
+  self.dynamic_names_to_indexes[name] = tail
+  self.dynamic_names_to_indexes[tail] = name
+  self.dynamic_table_size = self.dynamic_table_size + new_entry_size
+end
+
 local function add_static_table(i, name, value)
   local header_field = string.pack("s4s4", name, value or "")
   static_table[header_field] = i
@@ -9,15 +66,7 @@ local function add_static_table(i, name, value)
   static_table[name] = i
 end
 
-local function add_dynamic_table(self, name, value, bin)
-  local new_entry_size = 24 + #k
-  -- 4.4. Entry Eviction When Adding New Entries
-  while self.dynamic_table_size > self.dynamic_table_maxsize - new_entry_size do
-  end
-end
-
 local function encode_integer(i, prefix, mask)
-  assert(i >= 0 and i % 1 == 0)
   assert(prefix >= 0 and prefix <= 8 and prefix % 1 == 0)
   assert(mask >= 0 and mask <= 256 and mask % 1 == 0)
   if i < 2^prefix then
@@ -40,14 +89,14 @@ local function encode_integer(i, prefix, mask)
 end
 
 local function add(self, name, value, huffman)
-  local bin = string.pack("s4s4", name, value or "")
+  local i = string.pack("s4s4", name, value or "")
   -- 6.1. Indexed Header Field Representation
-  if static_table[bin] then
-    return encode_integer(i, 7, 0x80)
+  if static_table[i] then
+    return encode_integer(static_table[i], 7, 0x80)
   end
-  -- 6.2.1. Literal Header Field with Incremental Indexing
+  -- 6.2.1. Literal Header Field with Incremental Indexing - Indexed Name
   if static_table[name] then
-    add_dynamic_table(self, name, value, bin)
+    i = static_table[name]
     return encode_integer(i, 6, 0x40) .. encode_integer(#value, 7, 0) .. value
   end
 end
