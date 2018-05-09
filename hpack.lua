@@ -99,17 +99,16 @@ local function add(self, name, value, huffman)
     i = static_table[name]
     return encode_integer(i, 6, 0x40) .. encode_integer(#value, 7, 0) .. value
   end
-end
-
-local function new(HEADER_TABLE_SIZE)
-  local self = {
-    dynamic_table = {},
-    dynamic_table_size = 0,
-    maxsize = HEADER_TABLE_SIZE or 0,
-    dynamic_table_maxsize = nil
-  }
-  self.dynamic_table_maxsize = self.maxsize
-  return self
+  if self.dynamic_names_to_indexes[name] then
+    i = 61 + self.dynamic_table_tail - self.dynamic_names_to_indexes + 1
+    add_dynamic_table(self, name, value, i)
+    return encode_integer(i, 6, 0x40) .. encode_integer(#value, 7, 0) .. value
+  end
+  -- 6.2.1. Literal Header Field with Incremental Indexing - New Name
+  add_dynamic_table(self, name, value, i)
+  return "\64" .. encode_integer(#name, 7, 0) .. name .. encode_integer(#value, 7, 0) .. value
+  -- 6.2.2. Literal Header Field without Indexing?
+  -- 6.2.3. Literal Header Field Never Indexed?
 end
 
 local function serialize(self, header_list)
