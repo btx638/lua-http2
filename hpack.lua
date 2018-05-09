@@ -1,4 +1,3 @@
-local hpack = {}
 local static_table = {}
 local dynamic_table = {}
 local fd = io.open("dump.bin", "w")
@@ -7,6 +6,14 @@ local function add_static_table(i, name, value)
   local header_field = string.pack("s4s4", name, value or "")
   static_table[header_field] = i
   static_table[i] = header_field
+  static_table[name] = i
+end
+
+local function add_dynamic_table(self, name, value, bin)
+  local new_entry_size = 24 + #k
+  -- 4.4. Entry Eviction When Adding New Entries
+  while self.dynamic_table_size > self.dynamic_table_maxsize - new_entry_size do
+  end
 end
 
 local function encode_integer(i, prefix, mask)
@@ -32,21 +39,39 @@ local function encode_integer(i, prefix, mask)
   end
 end
 
-local function add(header_field, huffman)
-  local i = static_table[header_field]
-  if i then return encode_integer(i, 7, 0x80) end
+local function add(self, name, value, huffman)
+  local bin = string.pack("s4s4", name, value or "")
+  -- 6.1. Indexed Header Field Representation
+  if static_table[bin] then
+    return encode_integer(i, 7, 0x80)
+  end
+  -- 6.2.1. Literal Header Field with Incremental Indexing
+  if static_table[name] then
+    add_dynamic_table(self, name, value, bin)
+    return encode_integer(i, 6, 0x40) .. encode_integer(#value, 7, 0) .. value
+  end
 end
 
-function hpack.serialize(header_list)
+local function new(HEADER_TABLE_SIZE)
+  local self = {
+    dynamic_table = {},
+    dynamic_table_size = 0,
+    maxsize = HEADER_TABLE_SIZE or 0,
+    dynamic_table_maxsize = nil
+  }
+  self.dynamic_table_maxsize = self.maxsize
+  return self
+end
+
+local function serialize(self, header_list)
   local header_block = {}
   for name, value in pairs(header_list) do
-    header_field = string.pack("s4s4", name, value or "")
-    table.insert(header_block, add(header_field, huffman))
+    table.insert(header_block, add(self, name, value, huffman))
   end
   return header_block
 end
 
-function hpack.decode(fragment)
+local function decode(fragment)
 end
 
 add_static_table( 1, ":authority")
@@ -115,5 +140,11 @@ local header_block = hpack.serialize({[":method"] = "GET"})
 for k, v in pairs(header_block) do fd:write(v) end
 --local header_list = hpack.decode(header_block)
 --for k, v in pairs(header_list) do print(k, v) end
+
+local hpack = {
+  new = new,
+  encode = serialize,
+  decode = decode
+}
 
 return hpack
