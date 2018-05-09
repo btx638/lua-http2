@@ -184,11 +184,6 @@ add_static_table(59, "vary")
 add_static_table(60, "via")
 add_static_table(61, "www-authenticate")
 
-local header_block = hpack.serialize({[":method"] = "GET"})
-for k, v in pairs(header_block) do fd:write(v) end
---local header_list = hpack.decode(header_block)
---for k, v in pairs(header_list) do print(k, v) end
-
 local hpack = {
   new = new,
   encode = serialize,
