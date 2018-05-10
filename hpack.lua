@@ -1,6 +1,4 @@
 local static_table = {}
-local dynamic_table = {}
-local fd = io.open("dump.bin", "w")
 
 local function new(HEADER_TABLE_SIZE)
   local self = {
