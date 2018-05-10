@@ -54,8 +54,10 @@ local function add_dynamic_table(self, name, value, bin)
   self.dynamic_table_tail = tail
   self.dynamic_table[bin] = tail
   self.dynamic_table[tail] = bin
-  self.dynamic_names_to_indexes[name] = tail
-  self.dynamic_names_to_indexes[tail] = name
+  if not static_table[name] then
+    self.dynamic_names_to_indexes[name] = tail
+    self.dynamic_names_to_indexes[tail] = name
+  end
   self.dynamic_table_size = self.dynamic_table_size + new_entry_size
 end
 
