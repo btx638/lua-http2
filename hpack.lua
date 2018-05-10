@@ -74,7 +74,7 @@ local function encode_integer(i, prefix, mask)
   if i < 2^prefix then
     return string.char(mask | i)
   else
-    local prefix_mask = 2^prefix-1
+    local prefix_mask = 2^prefix - 1
     local chars = {
       prefix_mask | mask;
     }
@@ -90,6 +90,91 @@ local function encode_integer(i, prefix, mask)
   end
 end
 
+local function decode_integer(header_block, prefix, pos)
+  pos = pos or 1
+  local prefix_mask = 2^prefix - 1
+  if pos > #header_block then return end
+  local I = prefix_mask & header_block.byte(header_block, pos)
+  if I == prefix_mask then
+    local M = 0
+    repeat
+      pos = pos + 1
+      if pos > #header_block then return end
+      local B = header_block.byte(header_block,pos)
+      I = I + (B & 127) * 2^M
+      M = M + 7
+    until (B & 128) ~= 128
+  end
+  return I, pos + 1
+end
+
+local function index_to_headerfield(index)
+  if index <= 61 then return string.unpack("s4s4", static_table[index])
+  else return string.unpack("s4s4", 61 + self.dynamic_table_tail - index + 1) end
+end
+
+local function decode_string(str, pos)
+  pos = pos or 1
+  if pos > #str then return end
+  local first_byte = str.byte(str, pos)
+  local huffman = first_byte & 0x80 ~= 0
+  local len
+  len, pos = decode_integer(str, 7, pos)
+  if len == nil then return end
+  local newpos = pos + len
+  if newpos > #str+1 then return end
+  local val = str:sub(pos, newpos - 1)
+  -- TODO
+  --if huffman then
+  --  local err
+  --  val, err = huffman_decode(val)
+  --  if not val then
+  --    return nil, err
+  --  end
+  --end
+  return val, newpos
+end
+
+local function decode_helper(self, header_block, prefix, pos)
+  local index, name, value
+  index, pos = decode_integer(header_block, prefix, pos)
+  if index == nil then
+    return index, pos
+  end
+  if index == 0 then
+    name, pos = decode_string(header_block, pos)
+    if name == nil then
+      return name, pos
+    end
+    value, pos = decode_string(header_block, pos)
+    if value == nil then
+      return value, pos
+    end
+  else
+    name = index_to_headerfield(index)
+    if name == nil then
+      -- error: compression
+    end
+    value, pos = decode_string(header_block, pos)
+    if value == nil then
+      return value, pos
+    end
+  end
+  return name, value, pos
+end
+
+function resize_dynamic_table(self, new_size)
+  assert(new_size >= 0)
+  if new_size > self.total_max then
+    -- error: compression
+  end
+  while new_size < self.dynamic_table_size do
+    assert(evict(self))
+  end
+  self.dynamic_table_maxsize = new_size
+  return true
+end
+
 local function add(self, name, value, huffman)
   local i = string.pack("s4s4", name, value or "")
   -- 6.1. Indexed Header Field Representation
@@ -99,6 +184,7 @@ local function add(self, name, value, huffman)
   -- 6.2.1. Literal Header Field with Incremental Indexing - Indexed Name
   if static_table[name] then
     i = static_table[name]
+    add_dynamic_table(self, name, value, static_table[i])
     return encode_integer(i, 6, 0x40) .. encode_integer(#value, 7, 0) .. value
   end
   if self.dynamic_names_to_indexes[name] then
@@ -115,14 +201,65 @@ end
 
 local function serialize(self, header_list)
   local header_block = {}
-  for name, value in pairs(header_list) do
-    table.insert(header_block, add(self, name, value, huffman))
+  for _, header_field in ipairs(header_list) do
+    for name, value in pairs(header_field) do
+      table.insert(header_block, add(self, name, value, huffman))
+    end
   end
   return table.concat(header_block)
 end
 
-local function decode(header_block)
-
+local function decode(self, header_block)
+  local block_pos = 1
+  local header_list = {}
+  while block_pos <= #header_block do
+    local current_byte = header_block.byte(header_block, block_pos)
+    -- 6.1. Indexed Header Field Representation
+    if current_byte & 0x80 ~= 0 then
+      local index, block_newpos = decode_integer(header_block, 7, block_pos)
+      block_pos = block_newpos
+      local name, value = index_to_headerfield(index)
+      if not name then
+        -- error: compression
+      end
+      header_list[#header_list + 1] = {name = value}
+    -- 6.2.1. Literal Header Field with Incremental Indexing
+    elseif current_byte & 0x40 ~= 0 then
+      local name, value, block_newpos = decode_helper(self, header_block, 6, block_pos)
+      if not name then
+        if not value then
+          break
+        end
+        return nil, value
+      end
+      block_pos = block_newpos
+      add_dynamic_table(self, name, value, string.pack("s4s4", name, value))
+      header_list[#header_list + 1] = {}
+      header_list[#header_list][name] = value
+    -- 6.3. Dynamic Table Size Update
+    elseif current_byte & 0x20 ~= 0 then
+      if #header_list > 0 then
+        -- error: compression
+      end
+      local size, block_newpos = decode_integer(header_block, 5, block_pos)
+      if not size then break end
+      block_pos = block_newpos
+      local ok, err = resize_dynamic_table(size)
+    -- 6.2.2. Literal Header Field Without Indexing
+    else
+      local name, value, block_newpos = decode_helper(self, header_block, 4, block_pos)
+      if not name then
+        if not value then
+          break
+        end
+        return nil, value
+      end
+      block_pos = block_newpos
+      header_list[#header_list + 1] = {}
+      header_list[#header_list][name] = value
+    end
+  end
+  return header_list
 end
 
 add_static_table( 1, ":authority")
