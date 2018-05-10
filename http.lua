@@ -20,19 +20,22 @@ local initial_settings_parameters = {
   MAX_HEADER_LIST_SIZE   = math.huge
 }
 
--- 1) Send a HEADERS frame with the requested headers
--- 2) Returns the newly created stream
-local function create_stream(headers)
-  local flags = 0x4 | 0x1
-  local header_block = hpack.serialize(headers)
-  local payload
-  return stream
-end
-
 local function send_frame(frame_type, flags, stream_id, payload)
   local header = string.pack(">I3 B B I4", #payload, frame_type, flags, stream_id)
   tcp:send(header)
   tcp:send(payload)
+end
+
+-- 1) Send a HEADERS frame with the requested headers
+-- 2) Returns the newly created stream
+local function create_stream(headers)
+  local flags = 0x4 | 0x1
+  local max_frame_size = initial_settings_parameters.HEADER_TABLE_SIZE
+  local encoding_context = hpack.new(max_frame_size)
+  local header_block = hpack.encode(encoding_context, headers)
+  local payload = header_block
+  send_frame(0x1, flags, 3, payload)
+  return stream
 end
 
 local function start(host, port, param)
@@ -59,7 +62,14 @@ local function start(host, port, param)
     server_settings[id] = v
   end
   send_frame(0x4, 0x1, 0, "") -- ACK
-  local stream = create_stream({method = "GET"})
+  local stream = create_stream({[1] = {[":method"] = "GET"},
+                                [2] = {[":path"] = "/"},
+                                [3] = {[":scheme"] = "http"},
+                                [4] = {[":authority"] = "localhost:5000"},
+                                [5] = {["accept"] = "*/*"},
+                                [6] = {["user-agent"] = "http2_client"}
+                               })
+  local headers = tcp:receive(9)
   tcp:close()
 end
 
