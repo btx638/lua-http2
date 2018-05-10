@@ -26,6 +26,15 @@ local function send_frame(frame_type, flags, stream_id, payload)
   tcp:send(payload)
 end
 
+local function recv_frame()
+  -- 4.1. Frame Format
+  -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
+  local header = tcp:receive(9)
+  local length, frame_type, flags, stream_id = string.unpack(">I3 B B I4", header)
+  local payload = tcp:receive(length)
+  return payload
+end
+
 -- 1) Send a HEADERS frame with the requested headers
 -- 2) Returns the newly created stream
 local function create_stream(headers)
@@ -52,16 +61,16 @@ local function start(host, port, param)
   end
   local settings_payload = string.pack(">" .. ("I2 I4"):rep(i), table.unpack(p, 1, i * 2))
   send_frame(0x4, 0, 0, settings_payload)
-  -- Server Connection Preface
-  local settings_header = tcp:receive(9)
-  local length, frame_type, flags, stream_id = string.unpack(">I3 B B I4", settings_header)
+  --Server Connection Preface
+  local settings_payload = recv_frame()
   --Id = Id & 0x7fffffff
-  local settings_payload = tcp:receive(length)
   for i = 1, #settings_payload, 6 do
     id, v = string.unpack(">I2 I4", settings_payload, i)
     server_settings[id] = v
+    print(id, v)
   end
-  send_frame(0x4, 0x1, 0, "") -- ACK
+  --ACK server settings
+  send_frame(0x4, 0x1, 0, "")
   local stream = create_stream({[1] = {[":method"] = "GET"},
                                 [2] = {[":path"] = "/"},
                                 [3] = {[":scheme"] = "http"},
@@ -69,7 +78,7 @@ local function start(host, port, param)
                                 [5] = {["accept"] = "*/*"},
                                 [6] = {["user-agent"] = "http2_client"}
                                })
-  local headers = tcp:receive(9)
+  local headers_payload = recv_frame()
   tcp:close()
 end
 
