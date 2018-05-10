@@ -175,7 +175,7 @@ function resize_dynamic_table(self, new_size)
   return true
 end
 
-local function add(self, name, value, huffman)
+local function serialize(self, name, value, huffman)
   local i = string.pack("s4s4", name, value or "")
   -- 6.1. Indexed Header Field Representation
   if static_table[i] then
@@ -199,11 +199,11 @@ local function add(self, name, value, huffman)
   -- 6.2.3. Literal Header Field Never Indexed?
 end
 
-local function serialize(self, header_list)
+local function encode(self, header_list)
   local header_block = {}
   for _, header_field in ipairs(header_list) do
     for name, value in pairs(header_field) do
-      table.insert(header_block, add(self, name, value, huffman))
+      table.insert(header_block, serialize(self, name, value, huffman))
     end
   end
   return table.concat(header_block)
@@ -326,7 +326,7 @@ add_static_table(61, "www-authenticate")
 
 local hpack = {
   new = new,
-  encode = serialize,
+  encode = encode,
   decode = decode
 }
 
