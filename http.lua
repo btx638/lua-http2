@@ -32,7 +32,7 @@ local function recv_frame()
   local header = tcp:receive(9)
   local length, frame_type, flags, stream_id = string.unpack(">I3 B B I4", header)
   local payload = tcp:receive(length)
-  return payload
+  return frame_type, flags, stream_id, payload
 end
 
 -- 1) Send a HEADERS frame with the requested headers
@@ -61,15 +61,13 @@ local function start(host, port, param)
   end
   local settings_payload = string.pack(">" .. ("I2 I4"):rep(i), table.unpack(p, 1, i * 2))
   send_frame(0x4, 0, 0, settings_payload)
-  --Server Connection Preface
-  local settings_payload = recv_frame()
-  --Id = Id & 0x7fffffff
+  -- Server Connection Preface
+  local settings_payload = select(4, recv_frame())
   for i = 1, #settings_payload, 6 do
     id, v = string.unpack(">I2 I4", settings_payload, i)
     server_settings[id] = v
-    print(id, v)
   end
-  --ACK server settings
+  -- ACK server settings
   send_frame(0x4, 0x1, 0, "")
   local stream = create_stream({[1] = {[":method"] = "GET"},
                                 [2] = {[":path"] = "/"},
