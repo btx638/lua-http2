@@ -7,7 +7,8 @@ local header_block = hpack.encode(encoding_context, ({[1] = {[":method"] = "GET"
                                                       [3] = {[":scheme"] = "http"},
                                                       [4] = {[":authority"] = "localhost:5000"},
                                                       [5] = {["accept"] = "*/*"},
-                                                      [6] = {["user-agent"] = "http2_client"}
+                                                      [6] = {["user-agent"] = "http2_client"},
+                                                      [7] = {[":status"] = "404"}
                                                      }))
 --local header_block = hpack.encode(encoding_context, {[1] = {[":path"] = "/sample/path"}})
 fd:write(header_block)
