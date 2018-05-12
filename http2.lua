@@ -1,5 +1,6 @@
 local socket = require "socket"
 local hpack = require "hpack"
+
 local tcp = assert(socket.tcp())
 
 local settings_parameters = {
@@ -11,7 +12,7 @@ local settings_parameters = {
   MAX_HEADER_LIST_SIZE   = 0x6
 }
 
-local initial_settings_parameters = {
+local default_settings = {
   HEADER_TABLE_SIZE      = 4096,
   ENABLE_PUSH            = 1,
   MAX_CONCURRENT_STREAMS = math.huge,
@@ -21,7 +22,7 @@ local initial_settings_parameters = {
 }
 
 local function send_frame(frame_type, flags, stream_id, payload)
-  local header = string.pack(">I3 B B I4", #payload, frame_type, flags, stream_id)
+  local header = string.pack(">I3BBI4", #payload, frame_type, flags, stream_id)
   tcp:send(header)
   tcp:send(payload)
 end
@@ -30,7 +31,7 @@ local function recv_frame()
   -- 4.1. Frame Format
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
   local header = tcp:receive(9)
-  local length, frame_type, flags, stream_id = string.unpack(">I3 B B I4", header)
+  local length, frame_type, flags, stream_id = string.unpack(">I3BBI4", header)
   local payload = tcp:receive(length)
   return frame_type, flags, stream_id, payload
 end
@@ -39,7 +40,7 @@ end
 -- 2) Returns the newly created stream
 local function create_stream(headers)
   local flags = 0x4 | 0x1
-  local max_frame_size = initial_settings_parameters.HEADER_TABLE_SIZE
+  local max_frame_size = default_settings.HEADER_TABLE_SIZE
   local encoding_context = hpack.new(max_frame_size)
   local header_block = hpack.encode(encoding_context, headers)
   local payload = header_block
@@ -47,7 +48,7 @@ local function create_stream(headers)
   return stream
 end
 
-local function start(host, port, param)
+local function request(host, port, param)
   local i = 0
   local p = {}
   local server_settings = {}
@@ -59,7 +60,7 @@ local function start(host, port, param)
     p[i * 2 + 2] = v
     i = i + 1
   end
-  local settings_payload = string.pack(">" .. ("I2 I4"):rep(i), table.unpack(p, 1, i * 2))
+  local settings_payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(p, 1, i * 2))
   send_frame(0x4, 0, 0, settings_payload)
   -- Server Connection Preface
   local settings_payload = select(4, recv_frame())
@@ -69,15 +70,47 @@ local function start(host, port, param)
   end
   -- ACK server settings
   send_frame(0x4, 0x1, 0, "")
+  -- Request headers
   local stream = create_stream({[1] = {[":method"] = "GET"},
                                 [2] = {[":path"] = "/"},
                                 [3] = {[":scheme"] = "http"},
-                                [4] = {[":authority"] = "localhost:5000"},
+                                [4] = {[":authority"] = "localhost:8080"},
                                 [5] = {["accept"] = "*/*"},
-                                [6] = {["user-agent"] = "http2_client"}
+                                [6] = {["user-agent"] = "http2_client"},
+                                [7] = {["accept-encoding"] = "gzip, deflate"}
                                })
-  local headers_payload = recv_frame()
+  -- Server ACKed our settings
+  recv_frame()
+  local flags, stream_id, headers_payload = select(2, recv_frame())
+  -- Response headers
+  local end_stream = (flags & 0x1) ~= 0
+  local end_headers = (flags & 0x4) ~= 0
+  local padded = (flags & 0x8) ~= 0
+  local pad_length
+  if padded then
+    pad_length = string.unpack(">B", headers_payload)
+  else
+    pad_length = 0
+  end
+  local headers_payload_len = #headers_payload - pad_length
+  if end_headers then
+    if pad_length > 0 then
+      headers_payload = headers_payload:sub(1, - pad_length - 1)
+    end
+    local header_table_size = server_settings[1] or default_settings.HEADER_TABLE_SIZE
+    local decoding_context = hpack.new(header_table_size)
+    local header_list = hpack.decode(decoding_context, headers_payload)
+    for _, header_field in ipairs(header_list) do
+      for name, value in pairs(header_field) do
+        print(name, value)
+      end
+    end
+  end
   tcp:close()
 end
 
-start("localhost", 5000, {ENABLE_PUSH = 0})
+local http2 = {
+  request = request
+}
+
+return http2
