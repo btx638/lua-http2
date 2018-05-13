@@ -63,7 +63,7 @@ local function request(host, port, param)
   local settings_payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(p, 1, i * 2))
   send_frame(0x4, 0, 0, settings_payload)
   -- Server Connection Preface
-  local settings_payload = select(4, recv_frame())
+  local _, _, _, settings_payload = recv_frame()
   for i = 1, #settings_payload, 6 do
     id, v = string.unpack(">I2 I4", settings_payload, i)
     server_settings[id] = v
@@ -81,7 +81,7 @@ local function request(host, port, param)
                                })
   -- Server ACKed our settings
   recv_frame()
-  local flags, stream_id, headers_payload = select(2, recv_frame())
+  local _, flags, stream_id, headers_payload = recv_frame()
   -- Response headers
   local end_stream = (flags & 0x1) ~= 0
   local end_headers = (flags & 0x4) ~= 0
@@ -106,6 +106,8 @@ local function request(host, port, param)
       end
     end
   end
+  -- DATA frame containing the message payload
+
   tcp:close()
 end
 
