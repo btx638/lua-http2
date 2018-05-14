@@ -514,7 +514,7 @@ end
 
 function resize_dynamic_table(self, new_size)
   assert(new_size >= 0)
-  if new_size > self.total_max then
+  if new_size > self.maxsize then
     -- error: compression
   end
   while new_size < self.dynamic_table_size do
@@ -594,7 +594,7 @@ local function decode(self, header_block)
       local size, block_newpos = decode_integer(header_block, 5, block_pos)
       if not size then break end
       block_pos = block_newpos
-      local ok, err = resize_dynamic_table(size)
+      local ok, err = resize_dynamic_table(self, size)
     -- 6.2.2. Literal Header Field Without Indexing
     else
       local name, value, block_newpos = decode_helper(self, header_block, 4, block_pos)
