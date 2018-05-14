@@ -49,9 +49,7 @@ end
 local function submit_request(connection, headers)
   -- Request headers
   local flags = 0x4 | 0x1
-  local max_frame_size = default_settings.HEADER_TABLE_SIZE
-  local encoding_context = hpack.new(max_frame_size)
-  local header_block = hpack.encode(encoding_context, headers)
+  local header_block = hpack.encode(connection.hpack_context, headers)
   local payload = header_block
   send_frame(0x1, flags, 3, payload)
   -- Server ACKed our settings
@@ -95,7 +93,6 @@ local function settings()
   local i = 0
   local p = {}
   local server_settings = {}
-  -- Sends the Client Connection Preface
   tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 
   --to send a non-empty SETTINGS frame (default settings):
@@ -129,10 +126,6 @@ local function request(uri)
   }
   -- TODO: change port to 80
   tcp:connect(uri, 5000)
-  --[[ If starting an HTTP/2 connection with prior knowledge of server support
-      for the protocol, the client connection preface is sent upon connection
-      establishment.
-  ]]
   connection.server_settings = settings()
   local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
