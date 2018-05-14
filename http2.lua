@@ -54,8 +54,7 @@ local function submit_request(connection, headers)
   -- Request header list
   local flags = 0x4 | 0x1
   local header_block = hpack.encode(connection.hpack_context, headers)
-  local payload = header_block
-  send_frame(0x1, flags, 3, payload)
+  send_frame(0x1, flags, 3, header_block)
   -- Server ACKed our settings
   recv_frame()
   ---- Response header list
