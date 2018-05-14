@@ -36,13 +36,17 @@ local function recv_frame()
   return frame_type, flags, stream_id, payload
 end
 
-local function create_stream(id)
-
+local function create_stream()
+  local self = {
+    state = "idle",
+    id = nil
+  }
+  return self
 end
 
 -- 1) Send a HEADERS frame with the requested headers
 -- 2) Returns the newly created stream and the response headers
-local function submit_request(server_settings, headers)
+local function submit_request(connection, headers)
   -- Request headers
   local flags = 0x4 | 0x1
   local max_frame_size = default_settings.HEADER_TABLE_SIZE
@@ -68,7 +72,7 @@ local function submit_request(server_settings, headers)
     if pad_length > 0 then
       headers_payload = headers_payload:sub(1, - pad_length - 1)
     end
-    local header_table_size = server_settings[1] or default_settings.HEADER_TABLE_SIZE
+    local header_table_size = connection.server_settings[1] or default_settings.HEADER_TABLE_SIZE
     local decoding_context = hpack.new(header_table_size)
     local header_list = hpack.decode(decoding_context, headers_payload)
     for _, header_field in ipairs(header_list) do
@@ -77,9 +81,13 @@ local function submit_request(server_settings, headers)
       end
     end
   end
+  local stream = create_stream()
+  stream.id = connection.max_stream_id + 2
+  connection.max_stream_id = stream_id
   return header_list, stream
 end
 
+-- TODO: treat errors
 local function settings()
   local i = 0
   local p = {}
@@ -87,8 +95,8 @@ local function settings()
   -- Sends the Client Connection Preface
   tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 
-  -- to send a non-empty SETTINGS frame:
-  -- [[ for k, v in pairs(default_settings) do
+  --to send a non-empty SETTINGS frame:
+  --for k, v in pairs(default_settings) do
   --  p[i * 2 + 1] = settings_parameters[k]
   --  p[i * 2 + 2] = v
   --  i = i + 1
@@ -110,14 +118,17 @@ local function settings()
 end
 
 local function request(uri)
+  local connection = {
+    max_stream_id = 1,
+    server_settings = nil
+  }
   -- TODO: change port to 80
   tcp:connect(uri, 5000)
   --[[ If starting an HTTP/2 connection with prior knowledge of server support
       for the protocol, the client connection preface is sent upon connection
       establishment.
   ]]
-  -- TODO: verify errors
-  local server_settings = settings()
+  connection.server_settings = settings()
   local request_header_list = {[1] = {[":method"] = "GET"},
                                [2] = {[":path"] = "/"},
                                [3] = {[":scheme"] = "http"},
@@ -125,9 +136,9 @@ local function request(uri)
                                [5] = {["accept"] = "*/*"},
                                [6] = {["user-agent"] = "http2_client"},
                                [7] = {["accept-encoding"] = "gzip, deflate"}
-                               }
+                              }
   -- Performs the request
-  local response_header_list, stream = submit_request(server_settings, request_header_list)
+  local response_header_list, stream = submit_request(connection, request_header_list)
   -- DATA frame containing the message payload
   local _, flags, stream_id, headers_payload = recv_frame()
   local end_stream = (flags & 0x1) ~= 0
