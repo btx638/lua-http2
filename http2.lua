@@ -44,17 +44,21 @@ local function create_stream()
   return self
 end
 
--- 1) Send a HEADERS frame with the requested headers
--- 2) Returns the newly created stream and the response headers
+-- 1) Send a HEADERS frame with the requested header list
+-- 2) Returns the newly created stream and the response header list
 local function submit_request(connection, headers)
-  -- Request headers
+  -- TODO: stream flow control
+  local stream = create_stream()
+  stream.id = connection.max_stream_id + 2
+  connection.max_stream_id = stream_id
+  -- Request header list
   local flags = 0x4 | 0x1
   local header_block = hpack.encode(connection.hpack_context, headers)
   local payload = header_block
   send_frame(0x1, flags, 3, payload)
   -- Server ACKed our settings
   recv_frame()
-  ---- Response headers
+  ---- Response header list
   local _, flags, stream_id, headers_payload = recv_frame()
   local end_stream = (flags & 0x1) ~= 0
   local end_headers = (flags & 0x4) ~= 0
@@ -77,9 +81,6 @@ local function submit_request(connection, headers)
       end
     end
   end
-  local stream = create_stream()
-  stream.id = connection.max_stream_id + 2
-  connection.max_stream_id = stream_id
   return header_list, stream
 end
 
