@@ -134,7 +134,9 @@ local function request(uri)
       establishment.
   ]]
   connection.server_settings = settings()
-  local header_table_size = connection.server_settings[0x1] or default_settings[0x1]
+  local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
+  local default_table_size = default_settings.HEADER_TABLE_SIZE
+  local header_table_size = server_table_size or default_table_size
   connection.hpack_context = hpack.new(header_table_size)
   local request_header_list = {[1] = {[":method"] = "GET"},
                                [2] = {[":path"] = "/"},
