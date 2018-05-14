@@ -4,12 +4,12 @@ local hpack = require "hpack"
 local tcp = assert(socket.tcp())
 
 local settings_parameters = {
-  HEADER_TABLE_SIZE      = 0x1,
-  ENABLE_PUSH            = 0x2,
-  MAX_CONCURRENT_STREAMS = 0x3,
-  INITIAL_WINDOW_SIZE    = 0x4,
-  MAX_FRAME_SIZE         = 0x5,
-  MAX_HEADER_LIST_SIZE   = 0x6
+  [0x1] = "HEADER_TABLE_SIZE",
+  [0x2] = "ENABLE_PUSH",
+  [0x3] = "MAX_CONCURRENT_STREAMS",
+  [0x4] = "INITIAL_WINDOW_SIZE",
+  [0x5] = "MAX_FRAME_SIZE",
+  [0x6] = "MAX_HEADER_LIST_SIZE"
 }
 
 local default_settings = {
@@ -72,9 +72,7 @@ local function submit_request(connection, headers)
     if pad_length > 0 then
       headers_payload = headers_payload:sub(1, - pad_length - 1)
     end
-    local header_table_size = connection.server_settings[1] or default_settings.HEADER_TABLE_SIZE
-    local decoding_context = hpack.new(header_table_size)
-    local header_list = hpack.decode(decoding_context, headers_payload)
+    local header_list = hpack.decode(connection.hpack_context, headers_payload)
     for _, header_field in ipairs(header_list) do
       for name, value in pairs(header_field) do
         print(name, value)
@@ -89,15 +87,19 @@ end
 
 -- TODO: treat errors
 local function settings()
+  for id = 0x1, 0x6 do
+    settings_parameters[settings_parameters[id]] = id
+    default_settings[id] = default_settings[settings_parameters[id]]
+  end
   local i = 0
   local p = {}
   local server_settings = {}
   -- Sends the Client Connection Preface
   tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 
-  --to send a non-empty SETTINGS frame:
-  --for k, v in pairs(default_settings) do
-  --  p[i * 2 + 1] = settings_parameters[k]
+  --to send a non-empty SETTINGS frame (default settings):
+  --for k, v in ipairs(default_settings) do
+  --  p[i * 2 + 1] = k
   --  p[i * 2 + 2] = v
   --  i = i + 1
   --end
@@ -110,6 +112,7 @@ local function settings()
   local _, _, _, settings_payload = recv_frame()
   for i = 1, #settings_payload, 6 do
     id, v = string.unpack(">I2 I4", settings_payload, i)
+    server_settings[settings_parameters[id]] = v
     server_settings[id] = v
   end
   -- Acknowledge the server settings
@@ -120,6 +123,7 @@ end
 local function request(uri)
   local connection = {
     max_stream_id = 1,
+    hpack_context = nil,
     server_settings = nil
   }
   -- TODO: change port to 80
@@ -129,6 +133,8 @@ local function request(uri)
       establishment.
   ]]
   connection.server_settings = settings()
+  local table_size = connection.server_settings.HEADER_TABLE_SIZE or default_settings.HEADER_TABLE_SIZE
+  connection.hpack_context = hpack.new(table_size)
   local request_header_list = {[1] = {[":method"] = "GET"},
                                [2] = {[":path"] = "/"},
                                [3] = {[":scheme"] = "http"},
