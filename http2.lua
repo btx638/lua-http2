@@ -87,6 +87,7 @@ end
 
 -- TODO: treat errors
 local function settings()
+  -- SETTINGS parameters indexed both as names and identifiers
   for id = 0x1, 0x6 do
     settings_parameters[settings_parameters[id]] = id
     default_settings[id] = default_settings[settings_parameters[id]]
@@ -133,8 +134,8 @@ local function request(uri)
       establishment.
   ]]
   connection.server_settings = settings()
-  local table_size = connection.server_settings.HEADER_TABLE_SIZE or default_settings.HEADER_TABLE_SIZE
-  connection.hpack_context = hpack.new(table_size)
+  local header_table_size = connection.server_settings[0x1] or default_settings[0x1]
+  connection.hpack_context = hpack.new(header_table_size)
   local request_header_list = {[1] = {[":method"] = "GET"},
                                [2] = {[":path"] = "/"},
                                [3] = {[":scheme"] = "http"},
