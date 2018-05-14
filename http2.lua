@@ -15,10 +15,10 @@ local settings_parameters = {
 local default_settings = {
   HEADER_TABLE_SIZE      = 4096,
   ENABLE_PUSH            = 1,
-  MAX_CONCURRENT_STREAMS = math.huge,
+  MAX_CONCURRENT_STREAMS = math.huge, -- can math.huge be the max?
   INITIAL_WINDOW_SIZE    = 65535,
   MAX_FRAME_SIZE         = 16384,
-  MAX_HEADER_LIST_SIZE   = math.huge
+  MAX_HEADER_LIST_SIZE   = math.huge -- can math.huge be the max?
 }
 
 local function send_frame(frame_type, flags, stream_id, payload)
@@ -36,53 +36,24 @@ local function recv_frame()
   return frame_type, flags, stream_id, payload
 end
 
+local function create_stream(id)
+
+end
+
 -- 1) Send a HEADERS frame with the requested headers
--- 2) Returns the newly created stream
-local function create_stream(headers)
+-- 2) Returns the newly created stream and the response headers
+local function submit_request(server_settings, headers)
+  -- Request headers
   local flags = 0x4 | 0x1
   local max_frame_size = default_settings.HEADER_TABLE_SIZE
   local encoding_context = hpack.new(max_frame_size)
   local header_block = hpack.encode(encoding_context, headers)
   local payload = header_block
   send_frame(0x1, flags, 3, payload)
-  return stream
-end
-
-local function request(host, port, param)
-  local i = 0
-  local p = {}
-  local server_settings = {}
-  tcp:connect(host, port)
-  -- Client Connection Preface
-  tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-  for k, v in pairs(param) do
-    p[i * 2 + 1] = settings_parameters[k]
-    p[i * 2 + 2] = v
-    i = i + 1
-  end
-  local settings_payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(p, 1, i * 2))
-  send_frame(0x4, 0, 0, settings_payload)
-  -- Server Connection Preface
-  local _, _, _, settings_payload = recv_frame()
-  for i = 1, #settings_payload, 6 do
-    id, v = string.unpack(">I2 I4", settings_payload, i)
-    server_settings[id] = v
-  end
-  -- ACK server settings
-  send_frame(0x4, 0x1, 0, "")
-  -- Request headers
-  local stream = create_stream({[1] = {[":method"] = "GET"},
-                                [2] = {[":path"] = "/"},
-                                [3] = {[":scheme"] = "http"},
-                                [4] = {[":authority"] = "localhost:8080"},
-                                [5] = {["accept"] = "*/*"},
-                                [6] = {["user-agent"] = "http2_client"},
-                                [7] = {["accept-encoding"] = "gzip, deflate"}
-                               })
   -- Server ACKed our settings
   recv_frame()
+  ---- Response headers
   local _, flags, stream_id, headers_payload = recv_frame()
-  -- Response headers
   local end_stream = (flags & 0x1) ~= 0
   local end_headers = (flags & 0x4) ~= 0
   local padded = (flags & 0x8) ~= 0
@@ -106,8 +77,61 @@ local function request(host, port, param)
       end
     end
   end
-  -- DATA frame containing the message payload
+  return header_list, stream
+end
 
+local function settings()
+  local i = 0
+  local p = {}
+  local server_settings = {}
+  -- Sends the Client Connection Preface
+  tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+
+  -- to send a non-empty SETTINGS frame:
+  -- [[ for k, v in pairs(default_settings) do
+  --  p[i * 2 + 1] = settings_parameters[k]
+  --  p[i * 2 + 2] = v
+  --  i = i + 1
+  --end
+  --local settings_payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(p, 1, i * 2))
+  --send_frame(0x4, 0, 0, settings_payload)
+
+  -- Sends an empty SETTINGS frame
+  send_frame(0x4, 0, 0, "")
+  -- Receives the Server Connection Preface
+  local _, _, _, settings_payload = recv_frame()
+  for i = 1, #settings_payload, 6 do
+    id, v = string.unpack(">I2 I4", settings_payload, i)
+    server_settings[id] = v
+  end
+  -- Acknowledge the server settings
+  send_frame(0x4, 0x1, 0, "")
+  return server_settings
+end
+
+local function request(uri)
+  -- TODO: change port to 80
+  tcp:connect(uri, 5000)
+  --[[ If starting an HTTP/2 connection with prior knowledge of server support
+      for the protocol, the client connection preface is sent upon connection
+      establishment.
+  ]]
+  -- TODO: verify errors
+  local server_settings = settings()
+  local request_header_list = {[1] = {[":method"] = "GET"},
+                               [2] = {[":path"] = "/"},
+                               [3] = {[":scheme"] = "http"},
+                               [4] = {[":authority"] = "localhost:8080"},
+                               [5] = {["accept"] = "*/*"},
+                               [6] = {["user-agent"] = "http2_client"},
+                               [7] = {["accept-encoding"] = "gzip, deflate"}
+                               }
+  -- Performs the request
+  local response_header_list, stream = submit_request(server_settings, request_header_list)
+  -- DATA frame containing the message payload
+  local _, flags, stream_id, headers_payload = recv_frame()
+  local end_stream = (flags & 0x1) ~= 0
+  local padded = (flags & 0x8) ~= 0
   tcp:close()
 end
 
