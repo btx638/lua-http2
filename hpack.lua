@@ -29,7 +29,7 @@ local function evict(self)
     end
     self.dynamic_names_to_indexes[old_head] = nil
   end
-  local old_entry_size = dynamic_table_entry_size(pair)
+  local old_entry_size = 24 + #pair
   self.dynamic_table_size = self.dynamic_table_size - old_entry_size
   if self.dynamic_table_size == 0 then
     self.dynamic_table_head = 1
