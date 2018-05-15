@@ -137,8 +137,7 @@ local function request(uri)
     hpack_context = nil,
     server_settings = nil
   }
-  -- TODO: change port to 80
-  tcp:connect(uri, 5000)
+  tcp:connect(uri, 8080)
   connection.server_settings = settings()
   local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
@@ -146,14 +145,15 @@ local function request(uri)
   local request_headers = {[1] = {[":method"] = "GET"},
                            [2] = {[":path"] = "/"},
                            [3] = {[":scheme"] = "http"},
-                           [4] = {[":authority"] = "localhost:5000"},
+                           [4] = {[":authority"] = "localhost:8080"},
                           }
   -- Performs the request
   local response_headers, stream = submit_request(connection, request_headers)
   -- DATA frame containing the message payload
-  local _, flags, stream_id, headers_payload = recv_frame()
+  local _, flags, stream_id, data_payload = recv_frame()
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
+  print(data_payload)
   tcp:close()
 end
 
