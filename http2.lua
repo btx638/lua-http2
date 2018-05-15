@@ -46,7 +46,7 @@ end
 
 -- 1) Send a HEADERS frame with the requested header list
 -- 2) Returns the newly created stream and the response header list
-local function submit_request(connection, headers)
+local function submit_request(connection, headers, request_body)
   -- TODO: stream flow control
   local stream = create_stream()
   stream.id = connection.max_stream_id + 2
@@ -58,13 +58,14 @@ local function submit_request(connection, headers)
       print(name, value)
     end
   end
-  -- TODO
-  print("\n## BODY")
 
   -- Request header list
   local flags = 0x4 | 0x1
   local header_block = hpack.encode(connection.hpack_context, headers)
-  send_frame(0x1, flags, 3, header_block)
+  send_frame(0x1, flags, stream.id, header_block)
+  if request_body then
+    send_frame(0x0, 0x1, stream.id, request_body)
+  end
   -- Server ACKed our settings
   recv_frame()
   ---- Response header list
@@ -79,19 +80,16 @@ local function submit_request(connection, headers)
     pad_length = 0
   end
   local headers_payload_len = #headers_payload - pad_length
-  if end_headers then
-    if pad_length > 0 then
-      headers_payload = headers_payload:sub(1, - pad_length - 1)
+  -- TODO: Only one HEADERS frame is sent (END_HEADERS flag set and no CONTINUATION frames)
+  if pad_length > 0 then
+    headers_payload = headers_payload:sub(1, - pad_length - 1)
+  end
+  local header_list = hpack.decode(connection.hpack_context, headers_payload)
+  print("\n\n# RESPONSE\n\n## HEADERS")
+  for _, header_field in ipairs(header_list) do
+    for name, value in pairs(header_field) do
+      print(name, value)
     end
-    local header_list = hpack.decode(connection.hpack_context, headers_payload)
-    print("\n\n# RESPONSE\n\n## HEADERS")
-    for _, header_field in ipairs(header_list) do
-      for name, value in pairs(header_field) do
-        print(name, value)
-      end
-    end
-    -- TODO
-    print("\n## BODY")
   end
   return header_list, stream
 end
@@ -142,13 +140,21 @@ local function request(uri)
   local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
   connection.hpack_context = hpack.new(server_table_size or default_table_size)
+  --local request_headers = {[1] = {[":method"] = "GET"},
+  --                         [2] = {[":path"] = "/"},
+  --                         [3] = {[":scheme"] = "http"},
+  --                         [4] = {[":authority"] = "localhost:8080"},
+  --                        }
   local request_headers = {[1] = {[":method"] = "GET"},
-                           [2] = {[":path"] = "/"},
+                           [2] = {[":path"] = "/ko.html"},
                            [3] = {[":scheme"] = "http"},
                            [4] = {[":authority"] = "localhost:8080"},
+                           [5] = {["content-type"] = "text/html"},
+                           [6] = {["content-length"] = "126"},
                           }
+  local request_body = "<html><head><title>ko</title></head><body><h1>KO</h1><hr><address>nghttpd nghttp2/1.30.0 at port 8080</address></body></html>"
   -- Performs the request
-  local response_headers, stream = submit_request(connection, request_headers)
+  local response_headers, stream = submit_request(connection, request_headers, request_body)
   -- DATA frame containing the message payload
   local _, flags, stream_id, data_payload = recv_frame()
   local end_stream = (flags & 0x1) ~= 0
