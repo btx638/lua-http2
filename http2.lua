@@ -60,11 +60,13 @@ local function submit_request(connection, headers, request_body)
   end
 
   -- Request header list
-  local flags = 0x4 | 0x1
+  local flags = 0x4
   local header_block = hpack.encode(connection.hpack_context, headers)
   send_frame(0x1, flags, stream.id, header_block)
+  print("\n## BODY")
   if request_body then
     send_frame(0x0, 0x1, stream.id, request_body)
+    print(request_body)
   end
   -- Server ACKed our settings
   recv_frame()
@@ -145,14 +147,13 @@ local function request(uri)
   --                         [3] = {[":scheme"] = "http"},
   --                         [4] = {[":authority"] = "localhost:8080"},
   --                        }
-  local request_headers = {[1] = {[":method"] = "GET"},
-                           [2] = {[":path"] = "/ko.html"},
+  local request_headers = {[1] = {[":method"] = "POST"},
+                           [2] = {[":path"] = "/"},
                            [3] = {[":scheme"] = "http"},
                            [4] = {[":authority"] = "localhost:8080"},
-                           [5] = {["content-type"] = "text/html"},
-                           [6] = {["content-length"] = "126"},
                           }
   local request_body = "<html><head><title>ko</title></head><body><h1>KO</h1><hr><address>nghttpd nghttp2/1.30.0 at port 8080</address></body></html>"
+  --local request_body = "bla"
   -- Performs the request
   local response_headers, stream = submit_request(connection, request_headers, request_body)
   -- DATA frame containing the message payload
