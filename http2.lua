@@ -50,7 +50,17 @@ local function submit_request(connection, headers)
   -- TODO: stream flow control
   local stream = create_stream()
   stream.id = connection.max_stream_id + 2
-  connection.max_stream_id = stream_id
+  connection.max_stream_id = stream.id
+
+  print("# REQUEST\n\n## HEADERS")
+  for _, header_field in ipairs(headers) do
+    for name, value in pairs(header_field) do
+      print(name, value)
+    end
+  end
+  -- TODO
+  print("\n## BODY")
+
   -- Request header list
   local flags = 0x4 | 0x1
   local header_block = hpack.encode(connection.hpack_context, headers)
@@ -74,11 +84,14 @@ local function submit_request(connection, headers)
       headers_payload = headers_payload:sub(1, - pad_length - 1)
     end
     local header_list = hpack.decode(connection.hpack_context, headers_payload)
+    print("\n\n# RESPONSE\n\n## HEADERS")
     for _, header_field in ipairs(header_list) do
       for name, value in pairs(header_field) do
         print(name, value)
       end
     end
+    -- TODO
+    print("\n## BODY")
   end
   return header_list, stream
 end
@@ -129,18 +142,14 @@ local function request(uri)
   connection.server_settings = settings()
   local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
-  local header_table_size = server_table_size or default_table_size
-  connection.hpack_context = hpack.new(header_table_size)
-  local request_header_list = {[1] = {[":method"] = "GET"},
-                               [2] = {[":path"] = "/"},
-                               [3] = {[":scheme"] = "http"},
-                               [4] = {[":authority"] = "localhost:8080"},
-                               [5] = {["accept"] = "*/*"},
-                               [6] = {["user-agent"] = "http2_client"},
-                               [7] = {["accept-encoding"] = "gzip, deflate"}
-                              }
+  connection.hpack_context = hpack.new(server_table_size or default_table_size)
+  local request_headers = {[1] = {[":method"] = "GET"},
+                           [2] = {[":path"] = "/"},
+                           [3] = {[":scheme"] = "http"},
+                           [4] = {[":authority"] = "localhost:5000"},
+                          }
   -- Performs the request
-  local response_header_list, stream = submit_request(connection, request_header_list)
+  local response_headers, stream = submit_request(connection, request_headers)
   -- DATA frame containing the message payload
   local _, flags, stream_id, headers_payload = recv_frame()
   local end_stream = (flags & 0x1) ~= 0
