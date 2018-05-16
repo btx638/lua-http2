@@ -19,7 +19,7 @@ local default_settings = {
   MAX_CONCURRENT_STREAMS = 1, -- TODO: set to infinite
   INITIAL_WINDOW_SIZE    = 65535,
   MAX_FRAME_SIZE         = 16384,
-  MAX_HEADER_LIST_SIZE   = 25600
+  MAX_HEADER_LIST_SIZE   = 25600 -- TODO: set to infinite
 }
 
 local function send_frame(ftype, flags, stream_id, payload)

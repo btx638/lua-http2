@@ -1,3 +1,5 @@
+local hpack = require "hpack"
+
 local frame_parser = {}
 
 -- DATA frame parser
@@ -6,6 +8,21 @@ end
 
 -- HEADER frame parser
 frame_parser[0x1] = function(stream, flags, payload)
+  local end_stream = (flags & 0x1) ~= 0
+  local end_headers = (flags & 0x4) ~= 0
+  local padded = (flags & 0x8) ~= 0
+  local pad_length
+  if padded then
+    pad_length = string.unpack(">B", headers_payload)
+  else
+    pad_length = 0
+  end
+  local headers_payload_len = #payload - pad_length
+  if pad_length > 0 then
+    payload = payload:sub(1, - pad_length - 1)
+  end
+  local header_list = hpack.decode(stream.connection.hpack_context, payload)
+  return header_list
 end
 
 -- PRIORITY frame parser
