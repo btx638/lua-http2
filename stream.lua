@@ -1,48 +1,43 @@
 local frame_parser = {}
 
-local function frame_parser.ftypes.DATA
-end
-
-local function frame_parser.ftypes.HEADERS
-
 -- DATA frame parser
-local function parse_frame[0x0]
+frame_parser[0x0] = function(stream_id, flags, payload)
 end
 
 -- HEADER frame parser
-local function parse_frame[0x1]
+frame_parser[0x1] = function(stream_id, flags, payload)
 end
 
 -- PRIORITY frame parser
-local function parse_frame[0x2]
+frame_parser[0x2] = function(stream_id, flags, payload)
 end
 
 -- RST_STREAM frame parser
-local function parse_frame[0x3]
+frame_parser[0x3] = function(stream_id, flags, payload)
 end
 
 -- SETTING frame parser
-local function parse_frame[0x4]
+frame_parser[0x4] = function(stream_id, flags, payload)
 end
 
 -- PUSH_PROMISE frame parser
-local function parse_frame[0x5]
+frame_parser[0x5] = function(stream_id, flags, payload)
 end
 
 -- PING frame parser
-local function parse_frame[0x6]
+frame_parser[0x6] = function(stream_id, flags, payload)
 end
 
 -- GOAWAY frame parser
-local function parse_frame[0x7]
+frame_parser[0x7] = function(stream_id, flags, payload)
 end
 
 -- WINDOW_UPDATE frame parser
-local function parse_frame[0x8]
+frame_parser[0x8] = function(stream_id, flags, payload)
 end
 
 -- CONTINUATION frame parser
-local function parse_frame[0x9]
+frame_parser[0x9] = function(stream_id, flags, payload)
 end
 
 local stream = {

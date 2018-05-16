@@ -1,4 +1,5 @@
 local hpack = require "hpack"
+local stream = require "stream"
 local socket = require "socket"
 
 local tcp = assert(socket.tcp())
