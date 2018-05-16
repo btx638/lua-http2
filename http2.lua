@@ -47,11 +47,23 @@ local function submit_request(connection, headers, request_body)
       print(name, value)
     end
   end
-  return header_list, stream
+  return header_list, s
+end
+
+local function get_server_settings(connection)
+  local server_settings = {}
+  local s = connection.streams[0]
+  local _, flags, _, settings_payload = connection.recv_frame()
+  local parser = stream.frame_parser[0x4]
+  local server_settings = parser(s, flags, settings_payload)
+  -- Acknowledging the server settings
+  connection.send_frame(0x4, 0x1, 0, "")
+  return server_settings
 end
 
 local function request(uri, body)
   local connection = new_connection.new(uri)
+  connection.server_settings = get_server_settings(connection)
   local request_headers
   if not body then
     request_headers = {[1] = {[":method"] = "GET"},

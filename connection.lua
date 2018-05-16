@@ -38,21 +38,6 @@ local function recv_frame()
   return ftype, flags, stream_id, payload
 end
 
-
-local function get_server_settings()
-  local server_settings = {}
-  -- Receives the Server Connection Preface
-  local ftype, flags, stream_id, settings_payload = recv_frame()
-  for i = 1, #settings_payload, 6 do
-    id, v = string.unpack(">I2 I4", settings_payload, i)
-    server_settings[settings_parameters[id]] = v
-    server_settings[id] = v
-  end
-  -- Acknowledging the server settings
-  send_frame(0x4, 0x1, 0, "")
-  return server_settings
-end
-
 local function initiate_connection()
   local i = 0
   local t = {}
@@ -69,15 +54,6 @@ local function initiate_connection()
   end
   local payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
   send_frame(0x4, 0, 0, payload)
-end
-
--- TODO: move this thing to the stream module
-local function create_stream()
-  local self = {
-    state = "idle",
-    id = nil
-  }
-  return self
 end
 
 local function new(uri)
