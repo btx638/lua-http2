@@ -15,10 +15,10 @@ local settings_parameters = {
 local default_settings = {
   HEADER_TABLE_SIZE      = 4096,
   ENABLE_PUSH            = 1,
-  MAX_CONCURRENT_STREAMS = math.huge, -- can math.huge be the max?
+  MAX_CONCURRENT_STREAMS = 1, -- TODO: set to infinite
   INITIAL_WINDOW_SIZE    = 65535,
   MAX_FRAME_SIZE         = 16384,
-  MAX_HEADER_LIST_SIZE   = math.huge -- can math.huge be the max?
+  MAX_HEADER_LIST_SIZE   = 25600
 }
 
 local function send_frame(frame_type, flags, stream_id, payload)
@@ -44,10 +44,9 @@ local function create_stream()
   return self
 end
 
--- 1) Send a HEADERS frame with the requested header list
--- 2) Returns the newly created stream and the response header list
+-- Send a HEADERS frame with the requested header list
+-- Returns the newly created stream and the response header list
 local function submit_request(connection, headers, request_body)
-  -- TODO: stream flow control
   local stream = create_stream()
   stream.id = connection.max_stream_id + 2
   connection.max_stream_id = stream.id
@@ -60,9 +59,8 @@ local function submit_request(connection, headers, request_body)
   end
 
   -- Request header list
-  local flags = 0x4
   local header_block = hpack.encode(connection.hpack_context, headers)
-  send_frame(0x1, flags, stream.id, header_block)
+  send_frame(0x1, 0x4, stream.id, header_block)
   print("\n## BODY")
   if request_body then
     send_frame(0x0, 0x1, stream.id, request_body)
@@ -82,7 +80,6 @@ local function submit_request(connection, headers, request_body)
     pad_length = 0
   end
   local headers_payload_len = #headers_payload - pad_length
-  -- TODO: Only one HEADERS frame is sent (END_HEADERS flag set and no CONTINUATION frames)
   if pad_length > 0 then
     headers_payload = headers_payload:sub(1, - pad_length - 1)
   end
@@ -97,28 +94,8 @@ local function submit_request(connection, headers, request_body)
 end
 
 -- TODO: treat errors
-local function settings()
-  -- SETTINGS parameters indexed both as names and identifiers
-  for id = 0x1, 0x6 do
-    settings_parameters[settings_parameters[id]] = id
-    default_settings[id] = default_settings[settings_parameters[id]]
-  end
-  local i = 0
-  local p = {}
+local function get_server_settings()
   local server_settings = {}
-  tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-
-  --to send a non-empty SETTINGS frame (default settings):
-  --for k, v in ipairs(default_settings) do
-  --  p[i * 2 + 1] = k
-  --  p[i * 2 + 2] = v
-  --  i = i + 1
-  --end
-  --local settings_payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(p, 1, i * 2))
-  --send_frame(0x4, 0, 0, settings_payload)
-
-  -- Sends an empty SETTINGS frame
-  send_frame(0x4, 0, 0, "")
   -- Receives the Server Connection Preface
   local _, _, _, settings_payload = recv_frame()
   for i = 1, #settings_payload, 6 do
@@ -126,36 +103,57 @@ local function settings()
     server_settings[settings_parameters[id]] = v
     server_settings[id] = v
   end
-  -- Acknowledge the server settings
+  -- Acknowledging the server settings
   send_frame(0x4, 0x1, 0, "")
   return server_settings
 end
 
-local function request(uri)
+local function initiate_connection()
+  local i = 0
+  local t = {}
+  -- SETTINGS parameters indexed both as names and identifiers
+  for id = 0x1, 0x6 do
+    settings_parameters[settings_parameters[id]] = id
+    default_settings[id] = default_settings[settings_parameters[id]]
+  end
+  tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+  for k, v in ipairs(default_settings) do
+    t[i * 2 + 1] = k
+    t[i * 2 + 2] = v
+    i = i + 1
+  end
+  local payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
+  send_frame(0x4, 0, 0, payload)
+end
+
+local function request(uri, body)
+  tcp:connect(uri, 8080)
   local connection = {
     max_stream_id = 1,
     hpack_context = nil,
-    server_settings = nil
+    server_settings = nil,
   }
-  tcp:connect(uri, 8080)
-  connection.server_settings = settings()
+  initiate_connection()
+  connection.server_settings = get_server_settings()
   local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
   connection.hpack_context = hpack.new(server_table_size or default_table_size)
-  --local request_headers = {[1] = {[":method"] = "GET"},
-  --                         [2] = {[":path"] = "/"},
-  --                         [3] = {[":scheme"] = "http"},
-  --                         [4] = {[":authority"] = "localhost:8080"},
-  --                        }
-  local request_headers = {[1] = {[":method"] = "POST"},
-                           [2] = {[":path"] = "/"},
-                           [3] = {[":scheme"] = "http"},
-                           [4] = {[":authority"] = "localhost:8080"},
-                          }
-  local request_body = "<html><head><title>ko</title></head><body><h1>KO</h1><hr><address>nghttpd nghttp2/1.30.0 at port 8080</address></body></html>"
-  --local request_body = "bla"
+  local request_headers
+  if not body then
+    request_headers = {[1] = {[":method"] = "GET"},
+                       [2] = {[":path"] = "/"},
+                       [3] = {[":scheme"] = "http"},
+                       [4] = {[":authority"] = "localhost:8080"},
+                      }
+  else
+    request_headers = {[1] = {[":method"] = "POST"},
+                       [2] = {[":path"] = "/resource"},
+                       [3] = {[":scheme"] = "http"},
+                       [4] = {[":authority"] = "localhost:8080"},
+                      }
+  end
   -- Performs the request
-  local response_headers, stream = submit_request(connection, request_headers, request_body)
+  local response_headers, stream = submit_request(connection, request_headers, body)
   -- DATA frame containing the message payload
   local _, flags, stream_id, data_payload = recv_frame()
   local end_stream = (flags & 0x1) ~= 0
