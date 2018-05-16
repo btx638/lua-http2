@@ -22,8 +22,8 @@ local default_settings = {
   MAX_HEADER_LIST_SIZE   = 25600
 }
 
-local function send_frame(frame_type, flags, stream_id, payload)
-  local header = string.pack(">I3BBI4", #payload, frame_type, flags, stream_id)
+local function send_frame(ftype, flags, stream_id, payload)
+  local header = string.pack(">I3BBI4", #payload, ftype, flags, stream_id)
   tcp:send(header)
   tcp:send(payload)
 end
@@ -32,17 +32,17 @@ local function recv_frame()
   -- 4.1. Frame Format
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
   local header = tcp:receive(9)
-  local length, frame_type, flags, stream_id = string.unpack(">I3BBI4", header)
+  local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
   local payload = tcp:receive(length)
   stream_id = stream_id & 0x7fffffff
-  return frame_type, flags, stream_id, payload
+  return ftype, flags, stream_id, payload
 end
 
 
 local function get_server_settings()
   local server_settings = {}
   -- Receives the Server Connection Preface
-  local _, _, _, settings_payload = recv_frame()
+  local ftype, flags, stream_id, settings_payload = recv_frame()
   for i = 1, #settings_payload, 6 do
     id, v = string.unpack(">I2 I4", settings_payload, i)
     server_settings[settings_parameters[id]] = v
@@ -71,6 +71,7 @@ local function initiate_connection()
   send_frame(0x4, 0, 0, payload)
 end
 
+-- TODO: move this thing to the stream module
 local function create_stream()
   local self = {
     state = "idle",
