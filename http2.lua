@@ -21,8 +21,11 @@ local function submit_request(connection, headers, request_body)
   local header_block = hpack.encode(connection.hpack_context, headers)
   print("\n## BODY")
   if request_body then
+    connection.send_frame(0x1, 0x4, s.id, header_block)
     connection.send_frame(0x0, 0x1, s.id, request_body)
     print(request_body)
+  else
+    connection.send_frame(0x1, 0x4 | 0x1, s.id, header_block)
   end
   -- Server acknowledged our settings
   connection.recv_frame()
