@@ -1,12 +1,13 @@
 local new_connection = require "connection"
+local stream = require "stream"
 local hpack = require "hpack"
 
 -- Send a HEADERS frame with the requested header list
 -- Returns the newly created stream and the response header list
 local function submit_request(connection, headers, request_body)
-  local stream = connection.create_stream()
-  stream.id = connection.max_stream_id + 2
-  connection.max_stream_id = stream.id
+  local s = stream.new()
+  s.id = connection.max_stream_id + 2
+  connection.max_stream_id = s.id
 
   print("# REQUEST\n\n## HEADERS")
   for _, header_field in ipairs(headers) do
@@ -17,10 +18,10 @@ local function submit_request(connection, headers, request_body)
 
   -- Request header list
   local header_block = hpack.encode(connection.hpack_context, headers)
-  connection.send_frame(0x1, 0x4, stream.id, header_block)
+  connection.send_frame(0x1, 0x4, s.id, header_block)
   print("\n## BODY")
   if request_body then
-    connection.send_frame(0x0, 0x1, stream.id, request_body)
+    connection.send_frame(0x0, 0x1, s.id, request_body)
     print(request_body)
   end
   -- Server ACKed our settings
@@ -79,7 +80,7 @@ local function request(uri, body)
                       }
   end
   -- Performs the request
-  local response_headers, stream = submit_request(connection, request_headers, body)
+  local response_headers, s = submit_request(connection, request_headers, body)
   -- DATA frame containing the message payload
   local _, flags, stream_id, data_payload = connection.recv_frame()
   local end_stream = (flags & 0x1) ~= 0

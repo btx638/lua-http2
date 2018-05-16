@@ -63,14 +63,17 @@ local function new(uri)
     server_settings = {},
     send_frame = send_frame,
     recv_frame = recv_frame,
-    create_stream = create_stream
+    streams = {},
+    settings_parameters = settings_parameters
   }
   tcp:connect(uri, 8080)
   initiate_connection()
-  self.server_settings = get_server_settings()
   local server_table_size = self.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
   self.hpack_context = hpack.new(server_table_size or default_table_size)
+  local stream0 = stream.new(self)
+  stream0.id = 0
+  self.streams[0] = stream0
   return self
 end
 
