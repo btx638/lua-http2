@@ -18,7 +18,7 @@ local default_settings = {
   ENABLE_PUSH            = 1,
   MAX_CONCURRENT_STREAMS = 1, -- TODO: set to infinite
   INITIAL_WINDOW_SIZE    = 65535,
-  MAX_FRAME_SIZE         = 16384,
+  MAX_FRAME_SIZE         = 128,
   MAX_HEADER_LIST_SIZE   = 25600 -- TODO: set to infinite
 }
 
