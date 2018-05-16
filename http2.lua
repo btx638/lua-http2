@@ -26,7 +26,7 @@ local function submit_request(connection, headers, request_body)
   -- Server ACKed our settings
   connection.recv_frame()
   ---- Response header list
-  local _, flags, stream_id, headers_payload = connection.recv_frame()
+  local ftype, flags, stream_id, headers_payload = connection.recv_frame()
   local end_stream = (flags & 0x1) ~= 0
   local end_headers = (flags & 0x4) ~= 0
   local padded = (flags & 0x8) ~= 0

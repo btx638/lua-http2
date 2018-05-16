@@ -2,7 +2,6 @@ local hpack = require "hpack"
 local socket = require "socket"
 
 local tcp = assert(socket.tcp())
-local methods = {}
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",
@@ -34,6 +33,7 @@ local function recv_frame()
   local header = tcp:receive(9)
   local length, frame_type, flags, stream_id = string.unpack(">I3BBI4", header)
   local payload = tcp:receive(length)
+  stream_id = stream_id & 0x7fffffff
   return frame_type, flags, stream_id, payload
 end
 
@@ -55,7 +55,7 @@ end
 local function initiate_connection()
   local i = 0
   local t = {}
-  -- SETTINGS parameters indexed both as names and identifiers
+  -- Settings parameters indexed both as names and as hexadecimal identifiers
   for id = 0x1, 0x6 do
     settings_parameters[settings_parameters[id]] = id
     default_settings[id] = default_settings[settings_parameters[id]]
