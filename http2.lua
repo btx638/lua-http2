@@ -1,53 +1,10 @@
-local socket = require "socket"
+local new_connection = require "connection"
 local hpack = require "hpack"
-
-local tcp = assert(socket.tcp())
-
-local settings_parameters = {
-  [0x1] = "HEADER_TABLE_SIZE",
-  [0x2] = "ENABLE_PUSH",
-  [0x3] = "MAX_CONCURRENT_STREAMS",
-  [0x4] = "INITIAL_WINDOW_SIZE",
-  [0x5] = "MAX_FRAME_SIZE",
-  [0x6] = "MAX_HEADER_LIST_SIZE"
-}
-
-local default_settings = {
-  HEADER_TABLE_SIZE      = 4096,
-  ENABLE_PUSH            = 1,
-  MAX_CONCURRENT_STREAMS = 1, -- TODO: set to infinite
-  INITIAL_WINDOW_SIZE    = 65535,
-  MAX_FRAME_SIZE         = 16384,
-  MAX_HEADER_LIST_SIZE   = 25600
-}
-
-local function send_frame(frame_type, flags, stream_id, payload)
-  local header = string.pack(">I3BBI4", #payload, frame_type, flags, stream_id)
-  tcp:send(header)
-  tcp:send(payload)
-end
-
-local function recv_frame()
-  -- 4.1. Frame Format
-  -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
-  local header = tcp:receive(9)
-  local length, frame_type, flags, stream_id = string.unpack(">I3BBI4", header)
-  local payload = tcp:receive(length)
-  return frame_type, flags, stream_id, payload
-end
-
-local function create_stream()
-  local self = {
-    state = "idle",
-    id = nil
-  }
-  return self
-end
 
 -- Send a HEADERS frame with the requested header list
 -- Returns the newly created stream and the response header list
 local function submit_request(connection, headers, request_body)
-  local stream = create_stream()
+  local stream = connection.create_stream()
   stream.id = connection.max_stream_id + 2
   connection.max_stream_id = stream.id
 
@@ -60,16 +17,16 @@ local function submit_request(connection, headers, request_body)
 
   -- Request header list
   local header_block = hpack.encode(connection.hpack_context, headers)
-  send_frame(0x1, 0x4, stream.id, header_block)
+  connection.send_frame(0x1, 0x4, stream.id, header_block)
   print("\n## BODY")
   if request_body then
-    send_frame(0x0, 0x1, stream.id, request_body)
+    connection.send_frame(0x0, 0x1, stream.id, request_body)
     print(request_body)
   end
   -- Server ACKed our settings
-  recv_frame()
+  connection.recv_frame()
   ---- Response header list
-  local _, flags, stream_id, headers_payload = recv_frame()
+  local _, flags, stream_id, headers_payload = connection.recv_frame()
   local end_stream = (flags & 0x1) ~= 0
   local end_headers = (flags & 0x4) ~= 0
   local padded = (flags & 0x8) ~= 0
@@ -93,51 +50,8 @@ local function submit_request(connection, headers, request_body)
   return header_list, stream
 end
 
--- TODO: treat errors
-local function get_server_settings()
-  local server_settings = {}
-  -- Receives the Server Connection Preface
-  local _, _, _, settings_payload = recv_frame()
-  for i = 1, #settings_payload, 6 do
-    id, v = string.unpack(">I2 I4", settings_payload, i)
-    server_settings[settings_parameters[id]] = v
-    server_settings[id] = v
-  end
-  -- Acknowledging the server settings
-  send_frame(0x4, 0x1, 0, "")
-  return server_settings
-end
-
-local function initiate_connection()
-  local i = 0
-  local t = {}
-  -- SETTINGS parameters indexed both as names and identifiers
-  for id = 0x1, 0x6 do
-    settings_parameters[settings_parameters[id]] = id
-    default_settings[id] = default_settings[settings_parameters[id]]
-  end
-  tcp:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-  for k, v in ipairs(default_settings) do
-    t[i * 2 + 1] = k
-    t[i * 2 + 2] = v
-    i = i + 1
-  end
-  local payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
-  send_frame(0x4, 0, 0, payload)
-end
-
 local function request(uri, body)
-  tcp:connect(uri, 8080)
-  local connection = {
-    max_stream_id = 1,
-    hpack_context = nil,
-    server_settings = nil,
-  }
-  initiate_connection()
-  connection.server_settings = get_server_settings()
-  local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
-  local default_table_size = default_settings.HEADER_TABLE_SIZE
-  connection.hpack_context = hpack.new(server_table_size or default_table_size)
+  local connection = new_connection.new(uri)
   local request_headers
   if not body then
     request_headers = {[1] = {[":method"] = "GET"},
@@ -155,11 +69,10 @@ local function request(uri, body)
   -- Performs the request
   local response_headers, stream = submit_request(connection, request_headers, body)
   -- DATA frame containing the message payload
-  local _, flags, stream_id, data_payload = recv_frame()
+  local _, flags, stream_id, data_payload = connection.recv_frame()
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
   print(data_payload)
-  tcp:close()
 end
 
 local http2 = {
