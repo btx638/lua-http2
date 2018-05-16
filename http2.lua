@@ -19,6 +19,7 @@ local function submit_request(connection, headers, request_body)
 
   -- Request header list
   local header_block = hpack.encode(connection.hpack_context, headers)
+
   print("\n## BODY")
   if request_body then
     connection.send_frame(0x1, 0x4, s.id, header_block)
@@ -27,6 +28,7 @@ local function submit_request(connection, headers, request_body)
   else
     connection.send_frame(0x1, 0x4 | 0x1, s.id, header_block)
   end
+
   -- Server acknowledged our settings
   connection.recv_frame()
   ---- Response header list
@@ -34,12 +36,14 @@ local function submit_request(connection, headers, request_body)
   s = connection.streams[stream_id]
   local parser = stream.frame_parser[0x1]
   local header_list = parser(s, flags, headers_payload)
+
   print("\n\n# RESPONSE\n\n## HEADERS")
   for _, header_field in ipairs(header_list) do
     for name, value in pairs(header_field) do
       print(name, value)
     end
   end
+
   return header_list, s
 end
 
@@ -75,8 +79,9 @@ local function request(uri, body)
   local response_headers, s = submit_request(connection, request_headers, body)
   -- DATA frame containing the message payload
   local _, flags, stream_id, data_payload = connection.recv_frame()
-  local end_stream = (flags & 0x1) ~= 0
-  local padded = (flags & 0x8) ~= 0
+  local s = connection.streams[stream_id]
+  local parser = stream.frame_parser[0x0]
+  local data = parser(s, flags, data_payload)
   print(data_payload)
 end
 

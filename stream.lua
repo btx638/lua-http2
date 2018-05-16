@@ -4,9 +4,12 @@ local frame_parser = {}
 
 -- DATA frame parser
 frame_parser[0x0] = function(stream, flags, payload)
+  local end_stream = (flags & 0x1) ~= 0
+  local padded = (flags & 0x8) ~= 0
+  return payload
 end
 
--- HEADER frame parser
+-- HEADERS frame parser
 frame_parser[0x1] = function(stream, flags, payload)
   local end_stream = (flags & 0x1) ~= 0
   local end_headers = (flags & 0x4) ~= 0
