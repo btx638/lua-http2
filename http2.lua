@@ -66,7 +66,7 @@ local function request(uri, body)
   local request_headers
   if not body then
     request_headers = {[1] = {[":method"] = "GET"},
-                       [2] = {[":path"] = "/"},
+                       [2] = {[":path"] = "/image.jpg"},
                        [3] = {[":scheme"] = "http"},
                        [4] = {[":authority"] = "localhost:8080"},
                       }
