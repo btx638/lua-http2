@@ -6,7 +6,7 @@ local frame_parser = {}
 frame_parser[0x0] = function(stream, flags, payload)
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
-  return payload
+  table.insert(stream.data, payload)
 end
 
 -- HEADERS frame parser
@@ -72,19 +72,43 @@ end
 frame_parser[0x9] = function(stream, flags, payload)
 end
 
+local function next_data_frame(stream)
+  while #stream.data == 0 do
+    local _, flags, stream_id, data_payload = stream.connection.recv_frame()
+    if not stream_id then return nil end
+    local s = stream.connection.streams[stream_id]
+    local parser = frame_parser[0x0]
+    parser(s, flags, data_payload)
+  end
+  local data = table.remove(stream.data, 1)
+  return data
+end
+
+local function get_message_data(stream)
+  local payload = {}
+  while true do
+    local data = next_data_frame(stream)
+    if not data then break end
+    table.insert(payload, data)
+  end
+  return table.concat(payload)
+end
+
 local function new(connection)
   local self = {
     connection = connection,
     state = "idle",
     id = nil,
-    parent = nil
+    parent = nil,
+    data = {}
   }
   return self
 end
 
 local stream = {
   new = new,
-  frame_parser = frame_parser
+  frame_parser = frame_parser,
+  get_message_data = get_message_data
 }
 
 return stream

@@ -18,6 +18,7 @@ local function submit_request(connection, headers, request_body)
   end
 
   -- Request header list
+  -- TODO: HEADERS frame encoding
   local header_block = hpack.encode(connection.hpack_context, headers)
 
   print("\n## BODY")
@@ -31,7 +32,7 @@ local function submit_request(connection, headers, request_body)
 
   -- Server acknowledged our settings
   connection.recv_frame()
-  ---- Response header list
+  -- Response header list
   local ftype, flags, stream_id, headers_payload = connection.recv_frame()
   s = connection.streams[stream_id]
   local parser = stream.frame_parser[0x1]
@@ -59,6 +60,7 @@ local function get_server_settings(connection)
 end
 
 local function request(uri, body)
+  -- TODO: parse the URI
   local connection = new_connection.new(uri)
   connection.server_settings = get_server_settings(connection)
   local request_headers
@@ -78,11 +80,7 @@ local function request(uri, body)
   -- Performs the request
   local response_headers, s = submit_request(connection, request_headers, body)
   -- DATA frame containing the message payload
-  local _, flags, stream_id, data_payload = connection.recv_frame()
-  local s = connection.streams[stream_id]
-  local parser = stream.frame_parser[0x0]
-  local data = parser(s, flags, data_payload)
-  print(data_payload)
+  local payload = stream.get_message_data(s)
 end
 
 local http2 = {

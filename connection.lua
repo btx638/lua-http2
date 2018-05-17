@@ -32,6 +32,7 @@ local function recv_frame()
   -- 4.1. Frame Format
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
   local header = tcp:receive(9)
+  if not header then return nil end
   local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
   local payload = tcp:receive(length)
   stream_id = stream_id & 0x7fffffff
@@ -61,8 +62,8 @@ local function new(uri)
     max_stream_id = 1,
     hpack_context = nil,
     server_settings = {},
-    send_frame = send_frame,
-    recv_frame = recv_frame,
+    send_frame = send_frame, -- TODO: move these functions to the module table
+    recv_frame = recv_frame, -- TODO: move these functions to the module table
     streams = {},
     settings_parameters = settings_parameters
   }
