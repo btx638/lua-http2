@@ -66,7 +66,8 @@ local function new(uri)
     send_frame = send_frame, -- TODO: move these functions to the module table
     recv_frame = recv_frame, -- TODO: move these functions to the module table
     streams = {},
-    settings_parameters = settings_parameters
+    settings_parameters = settings_parameters,
+    window = 65535
   }
   tcp:connect(uri, 8080)
   initiate_connection()

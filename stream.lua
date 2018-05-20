@@ -7,6 +7,7 @@ frame_parser[0x0] = function(stream, flags, payload)
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
   table.insert(stream.data, payload)
+  return payload
 end
 
 -- HEADERS frame parser
@@ -100,7 +101,8 @@ local function new(connection)
     state = "idle",
     id = nil,
     parent = nil,
-    data = {}
+    data = {},
+    window = 65535
   }
   return self
 end
