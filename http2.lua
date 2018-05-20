@@ -23,8 +23,14 @@ local function submit_request(connection, headers, request_body)
   --print("\n## BODY")
   if request_body then
     connection.send_frame(0x1, 0x4, s.id, header_block)
-    connection.send_frame(0x0, 0x1, s.id, request_body)
-    --print(request_body)
+    local fsize = connection.server_settings.MAX_FRAME_SIZE
+    for i = 1, #request_body, fsize do
+      if i + fsize >= #request_body then
+        connection.send_frame(0x0, 0x1, s.id, string.sub(request_body, i))
+      else
+        connection.send_frame(0x0, 0x0, s.id, string.sub(request_body, i, i + fsize - 1))
+      end
+    end
   else
     connection.send_frame(0x1, 0x4 | 0x1, s.id, header_block)
   end
@@ -77,7 +83,7 @@ local function request(uri, body)
                       }
   else
     request_headers = {[1] = {[":method"] = "POST"},
-                       [2] = {[":path"] = "/resource"},
+                       [2] = {[":path"] = "/"},
                        [3] = {[":scheme"] = "http"},
                        [4] = {[":authority"] = "localhost:8080"},
                       }
@@ -87,8 +93,8 @@ local function request(uri, body)
   -- Sends an WINDOW_UPDATE frame on the stream level
   connection.send_frame(0x8, 0x0, s.id, string.pack(">I4", "1073741823"))
   -- DATA frame containing the message payload
-  local payload = stream.get_message_data(s)
-  print(payload)
+  --local payload = stream.get_message_data(s)
+  --print(payload)
 end
 
 local http2 = {
