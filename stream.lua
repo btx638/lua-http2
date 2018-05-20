@@ -39,7 +39,7 @@ end
 
 -- SETTING frame parser
 frame_parser[0x4] = function(stream, flags, payload)
-  local server_settings = {}
+  local server_settings = stream.connection.default_settings
   local ack = flags & 0x1 ~= 0
   if ack then
     return

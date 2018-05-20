@@ -67,6 +67,7 @@ local function new(uri)
     recv_frame = recv_frame, -- TODO: move these functions to the module table
     streams = {},
     settings_parameters = settings_parameters,
+    default_settings = default_settings,
     window = 65535
   }
   tcp:connect(uri, 8080)
