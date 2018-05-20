@@ -67,32 +67,33 @@ end
 
 -- WINDOW_UPDATE frame parser
 frame_parser[0x8] = function(stream, flags, payload)
+  local bytes = string.unpack(">I4", payload)
+  local increment = bytes & 0x7fffffff
+  if stream.id == 0 then
+    stream.connection.window = stream.connection.window + increment
+  else
+    stream.window = stream.window + increment
+  end
 end
 
 -- CONTINUATION frame parser
 frame_parser[0x9] = function(stream, flags, payload)
 end
 
-local function next_data_frame(stream)
-  while #stream.data == 0 do
-    local _, flags, stream_id, data_payload = stream.connection.recv_frame()
-    if not stream_id then return nil end
-    local s = stream.connection.streams[stream_id]
-    local parser = frame_parser[0x0]
-    parser(s, flags, data_payload)
-  end
-  local data = table.remove(stream.data, 1)
-  return data
-end
-
 local function get_message_data(stream)
-  local payload = {}
+  local result = {}
+  local s
   while true do
-    local data = next_data_frame(stream)
-    if not data then break end
-    table.insert(payload, data)
+    local _, flags, stream_id, data_payload = stream.connection.recv_frame()
+    if not stream_id then break end
+    s = stream.connection.streams[stream_id]
+    local parser = frame_parser[0x0]
+    local data = parser(s, flags, data_payload)
   end
-  return table.concat(payload)
+  while #s.data > 0 do
+    table.insert(result, table.remove(s.data, 1))
+  end
+  return table.concat(result)
 end
 
 local function new(connection)
