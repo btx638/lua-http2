@@ -1,6 +1,7 @@
 local hpack = require "hpack"
 local stream = require "stream"
 local socket = require "socket"
+local copas = require "copas"
 
 local tcp = assert(socket.tcp())
 
@@ -68,6 +69,7 @@ local function get_next_stream(connection)
   end
   local s = table.remove(connection.new_streams, 1)
   return s
+end
 
 local function new(uri)
   local self = {
