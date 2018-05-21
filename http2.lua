@@ -22,6 +22,7 @@ local function submit_request(connection, headers, request_body)
 
   --print("\n## BODY")
   if request_body then
+    -- TODO: correctness: may require padding to fit in a frame
     connection.send_frame(0x1, 0x4, s.id, header_block)
     local fsize = connection.server_settings.MAX_FRAME_SIZE
     for i = 1, #request_body, fsize do
@@ -93,8 +94,8 @@ local function request(uri, body)
   -- Sends an WINDOW_UPDATE frame on the stream level
   connection.send_frame(0x8, 0x0, s.id, string.pack(">I4", "1073741823"))
   -- DATA frame containing the message payload
-  --local payload = stream.get_message_data(s)
-  --print(payload)
+  local payload = stream.get_message_data(s)
+  --io.write(payload)
 end
 
 local http2 = {

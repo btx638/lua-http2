@@ -58,6 +58,17 @@ local function initiate_connection()
   send_frame(0x4, 0, 0, payload)
 end
 
+local function get_next_stream(connection)
+  while #connection.next_stream == 0 do
+    -- copas stuff
+    -- local stuff = copas
+    -- if stuff == connection then
+    --   read and parse frame
+    -- end
+  end
+  local s = table.remove(connection.new_streams, 1)
+  return s
+
 local function new(uri)
   local self = {
     max_stream_id = 1,
@@ -66,6 +77,7 @@ local function new(uri)
     send_frame = send_frame, -- TODO: move these functions to the module table
     recv_frame = recv_frame, -- TODO: move these functions to the module table
     streams = {},
+    next_stream = {},
     settings_parameters = settings_parameters,
     default_settings = default_settings,
     window = 65535
