@@ -3,7 +3,7 @@ local stream = require "stream"
 local socket = require "socket"
 local copas = require "copas"
 
-local tcp = assert(socket.tcp())
+local tcp = copas.wrap(socket.tcp())
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",

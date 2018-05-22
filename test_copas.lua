@@ -6,7 +6,7 @@ local mt = {__index = {}}
 
 local function open(uri)
   local h = setmetatable({tcp = tcp}, mt)
-  tcp:connect(uri, 80)
+  tcp:connect(uri, 8080)
   return h
 end
 
@@ -51,8 +51,7 @@ end)
 
 local function handler(host)
   request(host)
-  print("Host done: " .. host)
 end
 
-copas.addthread(handler, "www.google.com")
+copas.addthread(handler, "localhost")
 copas.loop()
