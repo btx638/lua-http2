@@ -32,9 +32,7 @@ end
 local function recv_frame()
   -- 4.1. Frame Format
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
-  tcp:settimeout(1)
   local header = tcp:receive(9)
-  if not header then return nil end
   local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
   local payload = tcp:receive(length)
   stream_id = stream_id & 0x7fffffff

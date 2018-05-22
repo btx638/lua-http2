@@ -95,7 +95,7 @@ local function request(uri, body)
   connection.send_frame(0x8, 0x0, s.id, string.pack(">I4", "1073741823"))
   -- DATA frame containing the message payload
   local payload = stream.get_message_data(s)
-  --io.write(payload)
+  io.write(payload)
 end
 
 local http2 = {

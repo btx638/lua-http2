@@ -85,10 +85,10 @@ local function get_message_data(stream)
   local s
   while true do
     local _, flags, stream_id, data_payload = stream.connection.recv_frame()
-    if not stream_id then break end
     s = stream.connection.streams[stream_id]
     local parser = frame_parser[0x0]
     local data = parser(s, flags, data_payload)
+    if flags == 0x01 then break end
   end
   while #s.data > 0 do
     table.insert(result, table.remove(s.data, 1))
