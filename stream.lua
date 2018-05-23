@@ -26,6 +26,7 @@ frame_parser[0x1] = function(stream, flags, payload)
     payload = payload:sub(1, - pad_length - 1)
   end
   local header_list = hpack.decode(stream.connection.hpack_context, payload)
+  table.insert(stream.headers, header_list)
   return header_list
 end
 
@@ -80,6 +81,16 @@ end
 frame_parser[0x9] = function(stream, flags, payload)
 end
 
+local function get_headers(stream)
+  while  #stream.headers == 0 do
+    local ftype, flags, stream_id, payload = stream.connection.recv_frame()
+    local s = stream.connection.streams[stream_id]
+    local parser = frame_parser[ftype]
+    local res = parser(s, flags, payload)
+  end
+  return table.remove(stream.headers, 1)
+end
+
 local function get_message_data(stream)
   local result = {}
   local s
@@ -103,6 +114,7 @@ local function new(connection)
     id = nil,
     parent = nil,
     data = {},
+    headers = {},
     window = 65535
   }
   return self
@@ -111,7 +123,8 @@ end
 local stream = {
   new = new,
   frame_parser = frame_parser,
-  get_message_data = get_message_data
+  get_message_data = get_message_data,
+  get_headers = get_headers
 }
 
 return stream

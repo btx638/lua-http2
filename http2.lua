@@ -36,17 +36,7 @@ local function submit_request(connection, headers, request_body)
     connection.send_frame(0x1, 0x4 | 0x1, s.id, header_block)
   end
 
-  -- Receives a WINDOW_UPDATE frame
-  local ftype, flags, stream_id, window_payload = connection.recv_frame()
-  local parser = stream.frame_parser[ftype]
-  parser(s, flags, window_payload)
-  -- Server acknowledged our settings
-  connection.recv_frame()
-  -- Response header list
-  local ftype, flags, stream_id, headers_payload = connection.recv_frame()
-  s = connection.streams[stream_id]
-  local parser = stream.frame_parser[ftype]
-  local header_list = parser(s, flags, headers_payload)
+  local header_list = stream.get_headers(s)
 
   --print("\n\n# RESPONSE\n\n## HEADERS")
   --for _, header_field in ipairs(header_list) do
