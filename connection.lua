@@ -37,6 +37,16 @@ local function recv_frame(conn)
   return ftype, flags, stream_id, payload
 end
 
+local function get_server_settings(conn)
+  local s = conn.streams[0]
+  local _, flags, _, settings_payload = recv_frame(conn)
+  local parser = stream.frame_parser[0x4]
+  local server_settings = parser(s, flags, settings_payload)
+  return server_settings
+end
+
+-- The client connection preface is sent upon connection establishment
+-- It MUST be followed by a SETTINGS frame
 local function initiate_connection(conn)
   local i = 0
   local t = {}
@@ -53,18 +63,12 @@ local function initiate_connection(conn)
   end
   local payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
   send_frame(conn, 0x4, 0, 0, payload)
-end
-
-local function get_next_stream(conn)
-  while #conn.next_stream == 0 do
-    -- copas stuff
-    -- local stuff = copas
-    -- if stuff == conn then
-    --   read and parse frame
-    -- end
-  end
-  local s = table.remove(conn.new_streams, 1)
-  return s
+  -- The server connection preface consists of a potentially empty SETTINGS frame
+  -- It MUST be the first frame the server sends in the HTTP/2 connection
+  conn.server_settings = get_server_settings(conn)
+  --[[ The SETTINGS frames received from a peer as part of the connection preface
+       MUST be acknowledged after sending the connection preface.]]
+  conn.send_frame(conn, 0x4, 0x1, 0, "")
 end
 
 local function new(uri)
@@ -83,13 +87,13 @@ local function new(uri)
     window = 65535
   }
   self.client:connect(uri, 8080)
+  local stream0 = stream.new(self)
+  stream0.id = 0
+  self.streams[0] = stream0
   initiate_connection(self)
   local server_table_size = self.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
   self.hpack_context = hpack.new(server_table_size or default_table_size)
-  local stream0 = stream.new(self)
-  stream0.id = 0
-  self.streams[0] = stream0
   return self
 end
 

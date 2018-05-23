@@ -48,21 +48,9 @@ local function submit_request(conn, headers, body)
   return header_list, s
 end
 
-local function get_server_settings(conn)
-  local server_settings = {}
-  local s = conn.streams[0]
-  local _, flags, _, settings_payload = conn.recv_frame(conn)
-  local parser = stream.frame_parser[0x4]
-  local server_settings = parser(s, flags, settings_payload)
-  -- Acknowledging the server settings
-  conn.send_frame(conn, 0x4, 0x1, 0, "")
-  return server_settings
-end
-
 local function request(uri, body)
   -- TODO: parse the URI
   local conn = connection.new(uri)
-  conn.server_settings = get_server_settings(conn)
   -- Sends an WINDOW_UPDATE frame on the conn level
   conn.send_frame(conn, 0x8, 0x0, 0, string.pack(">I4", "1073741823"))
   local request_headers
