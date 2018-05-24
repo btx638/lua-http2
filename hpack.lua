@@ -447,7 +447,7 @@ do
   end
 end
 
-local function index_to_headerfield(index)
+local function index_to_headerfield(self, index)
   if index <= 61 then
     local bin = static_table[index]
     if bin then
@@ -500,7 +500,7 @@ local function decode_helper(self, header_block, prefix, pos)
       return value, pos
     end
   else
-    name = index_to_headerfield(index)
+    name = index_to_headerfield(self, index)
     if name == nil then
       -- error: compression
     end
@@ -567,7 +567,7 @@ local function decode(self, header_block)
     if current_byte & 0x80 ~= 0 then
       local index, block_newpos = decode_integer(header_block, 7, block_pos)
       block_pos = block_newpos
-      local name, value = index_to_headerfield(index)
+      local name, value = index_to_headerfield(self, index)
       if not name then
         -- error: compression
       end
