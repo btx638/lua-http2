@@ -2,11 +2,15 @@ local connection = require "connection"
 local stream = require "stream"
 local hpack = require "hpack"
 local copas = require "copas"
+local socket = require "socket"
 
-local function protocol(host, headers)
-  local conn = connection.new(host)
-  -- Sends an WINDOW_UPDATE frame on the conn level
-  conn.send_frame(conn, 0x8, 0x0, 0, string.pack(">I4", "1073741823"))
+local tcp = socket.tcp()
+local conn = connection.new("localhost", tcp)
+-- Sends an WINDOW_UPDATE frame on the connection level
+conn.send_frame(conn, 0x8, 0x0, 0, string.pack(">I4", "1073741823"))
+
+local function protocol(headers)
+  conn.client = copas.wrap(conn.client)
   local request_headers = headers
   local s = stream.new(conn)
   s.id = conn.max_stream_id + 2
@@ -20,18 +24,28 @@ local function protocol(host, headers)
   conn.send_frame(conn, 0x8, 0x0, s.id, string.pack(">I4", "1073741823"))
   -- Receives DATA frames containing the message payload
   local payload = stream.get_message_data(s)
-  io.write(payload)
+  --io.write(payload)
 end
 
-local headers = {{ [1] = {[":method"] = "GET"},
-                   [2] = {[":path"] = "/"},
-                   [3] = {[":scheme"] = "http"},
-                   [4] = {[":authority"] = "localhost:8080"},
-                  },
-                  {[1] = {[":method"] = "GET"},
-                   [2] = {[":path"] = "/image.jpg"},
-                   [3] = {[":scheme"] = "http"},
-                   [4] = {[":authority"] = "localhost:8080"},
-                  }}
-copas.addthread(protocol, "localhost", headers)
+local headers = {[1] = {[":method"] = "GET"},
+                 [2] = {[":path"] = "/"},
+                 [3] = {[":scheme"] = "http"},
+                 [4] = {[":authority"] = "localhost:8080"},
+                }
+
+local headers2 = {[1] = {[":method"] = "GET"},
+                  [2] = {[":path"] = "/image.jpg"},
+                  [3] = {[":scheme"] = "http"},
+                  [4] = {[":authority"] = "localhost:8080"},
+                 }
+
+local headers3 = {[1] = {[":method"] = "GET"},
+                  [2] = {[":path"] = "/index2.html"},
+                  [3] = {[":scheme"] = "http"},
+                  [4] = {[":authority"] = "localhost:8080"},
+                 }
+
+copas.addthread(protocol, headers)
+copas.addthread(protocol, headers2)
+copas.addthread(protocol, headers3)
 copas.loop()

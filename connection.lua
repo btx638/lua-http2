@@ -1,6 +1,5 @@
 local hpack = require "hpack"
 local stream = require "stream"
-local socket = require "socket"
 local copas = require "copas"
 
 local settings_parameters = {
@@ -71,10 +70,9 @@ local function initiate_connection(conn)
   conn.send_frame(conn, 0x4, 0x1, 0, "")
 end
 
-local function new(uri)
-  local tcp = copas.wrap(socket.tcp())
+local function new(uri, socket)
   local self = {
-    client = tcp,
+    client = socket,
     max_stream_id = 1,
     hpack_context = nil,
     server_settings = {},
