@@ -95,9 +95,9 @@ local function get_message_data(stream)
   local result = {}
   local s
   while true do
-    local _, flags, stream_id, data_payload = stream.connection.recv_frame(stream.connection)
+    local ftype, flags, stream_id, data_payload = stream.connection.recv_frame(stream.connection)
     s = stream.connection.streams[stream_id]
-    local parser = frame_parser[0x0]
+    local parser = frame_parser[ftype]
     local data = parser(s, flags, data_payload)
     if flags == 0x01 then break end
   end

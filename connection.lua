@@ -1,6 +1,5 @@
 local hpack = require "hpack"
 local stream = require "stream"
-local copas = require "copas"
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",
@@ -31,6 +30,7 @@ local function recv_frame(conn)
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
   local header = conn.client:receive(9)
   local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
+  print(length, ftype, flags, stream_id)
   local payload = conn.client:receive(length)
   stream_id = stream_id & 0x7fffffff
   return ftype, flags, stream_id, payload
@@ -70,7 +70,7 @@ local function initiate_connection(conn)
   conn.send_frame(conn, 0x4, 0x1, 0, "")
 end
 
-local function new(uri, socket)
+local function new(socket)
   local self = {
     client = socket,
     max_stream_id = 1,
@@ -84,7 +84,6 @@ local function new(uri, socket)
     default_settings = default_settings,
     window = 65535
   }
-  self.client:connect(uri, 8080)
   local stream0 = stream.new(self)
   stream0.id = 0
   self.streams[0] = stream0
