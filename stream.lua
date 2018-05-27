@@ -93,19 +93,18 @@ local function get_headers(stream)
 end
 
 local function get_message_data(stream)
-  local result = {}
-  local s
+  local body = {}
+  local i = 0
+  local k = -1
+  for _ in pairs(stream.connection.streams) do k = k + 1 end
   while true do
     local ftype, flags, stream_id, data_payload = stream.connection.recv_frame(stream.connection)
     s = stream.connection.streams[stream_id]
     local parser = frame_parser[ftype]
     local data = parser(s, flags, data_payload)
-    if flags == 0x01 then break end
+    if flags == 0x01 then i = i + 1 end
+    if i == k then break end
   end
-  while #s.data > 0 do
-    table.insert(result, table.remove(s.data, 1))
-  end
-  return table.concat(result)
 end
 
 local function new(connection)
