@@ -1,5 +1,6 @@
 local hpack = require "hpack"
 local stream = require "stream"
+local copas = require "copas"
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",
@@ -30,7 +31,6 @@ local function recv_frame(conn)
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
   local header = conn.client:receive(9)
   local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
-  print(length, ftype, flags, stream_id)
   local payload = conn.client:receive(length)
   stream_id = stream_id & 0x7fffffff
   return ftype, flags, stream_id, payload

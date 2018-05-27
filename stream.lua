@@ -1,4 +1,5 @@
 local hpack = require "hpack"
+local copas = require "copas"
 
 local frame_parser = {}
 
