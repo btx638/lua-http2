@@ -82,6 +82,17 @@ end
 frame_parser[0x9] = function(stream, flags, payload)
 end
 
+local function send_window_update(stream, size)
+  local conn = stream.connection
+  conn.send_frame(conn, 0x8, 0x0, stream.id, string.pack(">I4", size))
+end
+
+local function send_headers(stream, headers)
+  local conn = stream.connection
+  local header_block = hpack.encode(conn.hpack_context, headers)
+  conn.send_frame(conn, 0x1, 0x4 | 0x1, stream.id, header_block)
+end
+
 local function get_headers(stream)
   while  #stream.headers == 0 do
     local ftype, flags, stream_id, payload = stream.connection.recv_frame(stream.connection)
@@ -117,12 +128,14 @@ local function new(connection)
     headers = {},
     window = 65535
   }
-  return self
+  return stream
 end
 
 local stream = {
   new = new,
   frame_parser = frame_parser,
+  send_window_update = send_window_update,
+  send_headers = send_headers,
   get_message_data = get_message_data,
   get_headers = get_headers
 }
