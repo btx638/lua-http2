@@ -113,6 +113,7 @@ function mt.__index:get_headers()
     local parser = frame_parser[ftype]
     local res = parser(s, flags, payload)
   end
+  return table.remove(self.headers, 1)
 end
 
 function mt.__index:get_body()
