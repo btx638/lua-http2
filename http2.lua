@@ -4,19 +4,19 @@ local hpack = require "hpack"
 local socket = require "socket"
 local copas = require "copas"
 
-local semaphore = true
-local conn
-
-local function submit(host, port, body, request_headers)
-  if semaphore then
-    semaphore = false
-    local client = copas.wrap(socket.tcp())
-    client:connect(host, port)
-    conn = connection.new(client)
-    local stream0 = conn.streams[0]
-    stream0:send_window_update("1073741823")
+local function request(host, port, body, request_headers)
+  if headers == nil then
+    headers = {}
+    table.insert(headers, {[":method"] = "GET"})
+    table.insert(headers, {[":path"] = "/"})
+    table.insert(headers, {[":scheme"] = "http"})
+    table.insert(headers, {[":authority"] = "localhost:8080"})
   end
-  copas.sleep(1)
+  local client = socket.tcp()
+  client:connect(host, port)
+  local conn = connection.new(client)
+  local stream0 = conn.streams[0]
+  stream0:send_window_update("1073741823")
   local s = stream.new(conn)
   s.id = conn.max_stream_id + 2
   conn.max_stream_id = s.id
@@ -24,21 +24,7 @@ local function submit(host, port, body, request_headers)
   s:send_headers(request_headers, body)
   s:send_window_update("1073741823")
   local response_headers = s:get_headers()
-  local response_body = s:get_body()
-end
-
-local function request(host, port, body, headers)
-  if headers == nil then
-    headers = {}
-    fields = {}
-    table.insert(fields, {[":method"] = "GET"})
-    table.insert(fields, {[":path"] = "/"})
-    table.insert(fields, {[":scheme"] = "http"})
-    table.insert(fields, {[":authority"] = "localhost:8080"})
-    table.insert(headers, fields)
-  end
-  for _, h in ipairs(headers) do copas.addthread(submit, host, port, body, h) end
-  copas.loop()
+  return response_headers, s
 end
 
 local http2 = {

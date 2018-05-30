@@ -1,5 +1,4 @@
 local hpack = require "hpack"
-local copas = require "copas"
 
 local mt = {__index = {}}
 
@@ -114,7 +113,6 @@ function mt.__index:get_headers()
     local parser = frame_parser[ftype]
     local res = parser(s, flags, payload)
   end
-  return table.remove(self.headers, 1)
 end
 
 function mt.__index:get_body()
@@ -130,6 +128,10 @@ function mt.__index:get_body()
     if flags == 0x01 then i = i + 1 end
     if i == k then break end
   end
+  while #self.data > 0 do
+    table.insert(body, table.remove(self.data, 1))
+  end
+  return table.concat(body)
 end
 
 local function new(connection)
