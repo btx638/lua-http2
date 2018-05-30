@@ -9,7 +9,6 @@ frame_parser[0x0] = function(stream, flags, payload)
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
   table.insert(stream.data, payload)
-  return payload
 end
 
 -- HEADERS frame parser
@@ -108,7 +107,7 @@ end
 function mt.__index:get_headers()
   local conn = self.connection
   while  #self.headers == 0 do
-    local ftype, flags, stream_id, payload = conn.recv_frame(conn)
+    local ftype, flags, stream_id, payload = conn:recv_frame()
     local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
     local res = parser(s, flags, payload)
@@ -116,18 +115,24 @@ function mt.__index:get_headers()
   return table.remove(self.headers, 1)
 end
 
-function mt.__index:get_body()
-  local body = {}
-  local i = 0
-  local k = -1
-  for _ in pairs(self.connection.streams) do k = k + 1 end
+local function next_data(conn, stream)
+  local ftype, flags, stream_id, data_payload
   while true do
-    local ftype, flags, stream_id, data_payload = self.connection.recv_frame(self.connection)
-    s = self.connection.streams[stream_id]
+    ftype, flags, stream_id, data_payload = conn:recv_frame()
+    local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
-    local data = parser(s, flags, data_payload)
-    if flags == 0x01 then i = i + 1 end
-    if i == k then break end
+    parser(s, flags, data_payload)
+    if stream_id == stream.id then break end
+  end
+  return flags
+end
+
+function mt.__index:get_body()
+  local conn = self.connection
+  local body = {}
+  while true do
+    local flags = next_data(conn, self)
+    if flags == 0x01 then break end
   end
   while #self.data > 0 do
     table.insert(body, table.remove(self.data, 1))
