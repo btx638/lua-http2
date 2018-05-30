@@ -108,7 +108,7 @@ local function get_message_data(stream)
 end
 
 local function new(connection)
-  local self = {
+  local stream = {
     connection = connection,
     state = "idle",
     id = nil,

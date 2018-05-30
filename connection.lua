@@ -14,10 +14,10 @@ local settings_parameters = {
 local default_settings = {
   HEADER_TABLE_SIZE      = 4096,
   ENABLE_PUSH            = 1,
-  MAX_CONCURRENT_STREAMS = 100, -- TODO: set to infinite
+  MAX_CONCURRENT_STREAMS = 100,
   INITIAL_WINDOW_SIZE    = 65535,
   MAX_FRAME_SIZE         = 16384,
-  MAX_HEADER_LIST_SIZE   = 25600 -- TODO: set to infinite
+  MAX_HEADER_LIST_SIZE   = 25600
 }
 
 local function send_frame(conn, ftype, flags, stream_id, payload)
@@ -27,7 +27,6 @@ local function send_frame(conn, ftype, flags, stream_id, payload)
 end
 
 local function recv_frame(conn)
-  -- 4.1. Frame Format
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
   local header = conn.client:receive(9)
   local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
@@ -49,6 +48,9 @@ end
 local function initiate_connection(conn)
   local i = 0
   local t = {}
+  local stream0 = stream.new(conn)
+  stream0.id = 0
+  conn.streams[0] = stream0
   -- Settings parameters indexed both as names and as hexadecimal identifiers
   for id = 0x1, 0x6 do
     settings_parameters[settings_parameters[id]] = id
@@ -65,33 +67,30 @@ local function initiate_connection(conn)
   -- The server connection preface consists of a potentially empty SETTINGS frame
   -- It MUST be the first frame the server sends in the HTTP/2 connection
   conn.server_settings = get_server_settings(conn)
-  --[[ The SETTINGS frames received from a peer as part of the connection preface
-       MUST be acknowledged after sending the connection preface.]]
+  -- The SETTINGS frames received from a peer as part of the connection preface
+  -- MUST be acknowledged after sending the connection preface.]]
   conn.send_frame(conn, 0x4, 0x1, 0, "")
+  local server_table_size = conn.server_settings.HEADER_TABLE_SIZE
+  local default_table_size = default_settings.HEADER_TABLE_SIZE
+  conn.hpack_context = hpack.new(server_table_size or default_table_size)
 end
 
 local function new(socket)
-  local self = {
+  local connection = {
     client = socket,
     max_stream_id = 1,
     hpack_context = nil,
     server_settings = {},
-    send_frame = send_frame, -- TODO: move these functions to the module table
-    recv_frame = recv_frame, -- TODO: move these functions to the module table
+    send_frame = send_frame,
+    recv_frame = recv_frame,
     streams = {},
     next_stream = {},
     settings_parameters = settings_parameters,
     default_settings = default_settings,
     window = 65535
   }
-  local stream0 = stream.new(self)
-  stream0.id = 0
-  self.streams[0] = stream0
-  initiate_connection(self)
-  local server_table_size = self.server_settings.HEADER_TABLE_SIZE
-  local default_table_size = default_settings.HEADER_TABLE_SIZE
-  self.hpack_context = hpack.new(server_table_size or default_table_size)
-  return self
+  initiate_connection(connection)
+  return connection
 end
 
 local connection = {
