@@ -7,11 +7,11 @@ local copas = require "copas"
 local semaphore = true
 local conn
 
-local function submit(uri, port, body, request_headers)
+local function submit(host, port, body, request_headers)
   if semaphore then
     semaphore = false
     local client = copas.wrap(socket.tcp())
-    client:connect(uri, port)
+    client:connect(host, port)
     conn = connection.new(client)
     stream.send_window_update(conn.streams[0], "1073741823")
   end
@@ -26,7 +26,7 @@ local function submit(uri, port, body, request_headers)
   local response_body = stream.get_body(s)
 end
 
-local function request(uri, port, body, headers)
+local function request(host, port, body, headers)
   if headers == nil then
     headers = {}
     fields = {}
@@ -36,7 +36,7 @@ local function request(uri, port, body, headers)
     table.insert(fields, {[":authority"] = "localhost:8080"})
     table.insert(headers, fields)
   end
-  for _, h in ipairs(headers) do copas.addthread(submit, uri, port, body, h) end
+  for _, h in ipairs(headers) do copas.addthread(submit, host, port, body, h) end
   copas.loop()
 end
 
