@@ -1,6 +1,5 @@
 local hpack = require "hpack"
 local stream = require "stream"
-local copas = require "copas"
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",

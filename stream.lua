@@ -103,7 +103,7 @@ local function get_headers(stream)
   return table.remove(stream.headers, 1)
 end
 
-local function get_message_data(stream)
+local function get_body(stream)
   local body = {}
   local i = 0
   local k = -1
@@ -136,7 +136,7 @@ local stream = {
   frame_parser = frame_parser,
   send_window_update = send_window_update,
   send_headers = send_headers,
-  get_message_data = get_message_data,
+  get_body = get_body,
   get_headers = get_headers
 }
 

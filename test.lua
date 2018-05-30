@@ -26,7 +26,7 @@ local function protocol(headers)
   stream.send_window_update(s, "1073741823")
   local header_list = stream.get_headers(s)
   -- Receives DATA frames containing the message payload
-  stream.get_message_data(s)
+  stream.get_body(s)
 end
 
 local headers = {{[1] = {[":method"] = "GET"},
