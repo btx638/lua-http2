@@ -1,6 +1,8 @@
 local hpack = require "hpack"
 local copas = require "copas"
 
+local mt = {__index = {}}
+
 local frame_parser = {}
 
 -- DATA frame parser
@@ -82,46 +84,47 @@ end
 frame_parser[0x9] = function(stream, flags, payload)
 end
 
-local function send_window_update(stream, size)
-  local conn = stream.connection
-  conn.send_frame(conn, 0x8, 0x0, stream.id, string.pack(">I4", size))
+function mt.__index:send_window_update(size)
+  local conn = self.connection
+  conn.send_frame(conn, 0x8, 0x0, self.id, string.pack(">I4", size))
 end
 
-local function send_headers(stream, headers, body)
-  local conn = stream.connection
+function mt.__index:send_headers(headers, body)
+  local conn = self.connection
   local header_block = hpack.encode(conn.hpack_context, headers)
   if body then
     local fsize = conn.server_settings.MAX_FRAME_SIZE
     for i = 1, #body, fsize do
       if i + fsize >= #body then
-        conn.send_frame(conn, 0x0, 0x1, stream.id, string.sub(body, i))
+        conn.send_frame(conn, 0x0, 0x1, self.id, string.sub(body, i))
       else
-        conn.send_frame(conn, 0x0, 0x0, stream.id, string.sub(body, i, i + fsize - 1))
+        conn.send_frame(conn, 0x0, 0x0, self.id, string.sub(body, i, i + fsize - 1))
       end
     end
   else
-    conn.send_frame(conn, 0x1, 0x4 | 0x1, stream.id, header_block)
+    conn.send_frame(conn, 0x1, 0x4 | 0x1, self.id, header_block)
   end
 end
 
-local function get_headers(stream)
-  while  #stream.headers == 0 do
-    local ftype, flags, stream_id, payload = stream.connection.recv_frame(stream.connection)
-    local s = stream.connection.streams[stream_id]
+function mt.__index:get_headers()
+  local conn = self.connection
+  while  #self.headers == 0 do
+    local ftype, flags, stream_id, payload = conn.recv_frame(conn)
+    local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
     local res = parser(s, flags, payload)
   end
-  return table.remove(stream.headers, 1)
+  return table.remove(self.headers, 1)
 end
 
-local function get_body(stream)
+function mt.__index:get_body()
   local body = {}
   local i = 0
   local k = -1
-  for _ in pairs(stream.connection.streams) do k = k + 1 end
+  for _ in pairs(self.connection.streams) do k = k + 1 end
   while true do
-    local ftype, flags, stream_id, data_payload = stream.connection.recv_frame(stream.connection)
-    s = stream.connection.streams[stream_id]
+    local ftype, flags, stream_id, data_payload = self.connection.recv_frame(self.connection)
+    s = self.connection.streams[stream_id]
     local parser = frame_parser[ftype]
     local data = parser(s, flags, data_payload)
     if flags == 0x01 then i = i + 1 end
@@ -130,7 +133,7 @@ local function get_body(stream)
 end
 
 local function new(connection)
-  local stream = {
+  local stream = setmetatable({
     connection = connection,
     state = "idle",
     id = nil,
@@ -138,17 +141,13 @@ local function new(connection)
     data = {},
     headers = {},
     window = 65535
-  }
+  }, mt)
   return stream
 end
 
 local stream = {
   new = new,
-  frame_parser = frame_parser,
-  send_window_update = send_window_update,
-  send_headers = send_headers,
-  get_body = get_body,
-  get_headers = get_headers
+  frame_parser = frame_parser
 }
 
 return stream

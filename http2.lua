@@ -13,17 +13,18 @@ local function submit(host, port, body, request_headers)
     local client = copas.wrap(socket.tcp())
     client:connect(host, port)
     conn = connection.new(client)
-    stream.send_window_update(conn.streams[0], "1073741823")
+    local stream0 = conn.streams[0]
+    stream0:send_window_update("1073741823")
   end
   copas.sleep(1)
   local s = stream.new(conn)
   s.id = conn.max_stream_id + 2
   conn.max_stream_id = s.id
   conn.streams[s.id] = s
-  stream.send_headers(s, request_headers, body)
-  stream.send_window_update(s, "1073741823")
-  local response_headers = stream.get_headers(s)
-  local response_body = stream.get_body(s)
+  s:send_headers(request_headers, body)
+  s:send_window_update("1073741823")
+  local response_headers = s:get_headers()
+  local response_body = s:get_body()
 end
 
 local function request(host, port, body, headers)
