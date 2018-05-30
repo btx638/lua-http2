@@ -87,10 +87,21 @@ local function send_window_update(stream, size)
   conn.send_frame(conn, 0x8, 0x0, stream.id, string.pack(">I4", size))
 end
 
-local function send_headers(stream, headers)
+local function send_headers(stream, headers, body)
   local conn = stream.connection
   local header_block = hpack.encode(conn.hpack_context, headers)
-  conn.send_frame(conn, 0x1, 0x4 | 0x1, stream.id, header_block)
+  if body then
+    local fsize = conn.server_settings.MAX_FRAME_SIZE
+    for i = 1, #body, fsize do
+      if i + fsize >= #body then
+        conn.send_frame(conn, 0x0, 0x1, stream.id, string.sub(body, i))
+      else
+        conn.send_frame(conn, 0x0, 0x0, stream.id, string.sub(body, i, i + fsize - 1))
+      end
+    end
+  else
+    conn.send_frame(conn, 0x1, 0x4 | 0x1, stream.id, header_block)
+  end
 end
 
 local function get_headers(stream)
