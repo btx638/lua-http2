@@ -90,7 +90,7 @@ local function new(host, port)
     default_settings = default_settings,
     window = 65535
   }, mt)
-  connection.client = copas.wrap(socket.tcp())
+  connection.client = socket.tcp()
   connection.client:connect(host, port)
   initiate_connection(connection, host, port)
   return connection
