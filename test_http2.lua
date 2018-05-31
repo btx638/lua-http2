@@ -19,50 +19,10 @@ table.insert(h3, {[":path"] = "/index3.html"})
 table.insert(h3, {[":scheme"] = "http"})
 table.insert(h3, {[":authority"] = "localhost:8080"})
 
-local headers = {}
-table.insert(headers, h1)
-table.insert(headers, h2)
-table.insert(headers, h3)
-
 copas.addthread(function()
   local response_headers, s = http2.request("localhost", 8080, nil, h1)
-
-  --for _, h in ipairs(response_headers) do
-  --  for name, value in pairs(h) do
-  --    print(name, value)
-  --  end
-  --end
-
-  local fd = io.open("s1", "w")
+  local fd = assert(io.open("s1", "w"))
   local body = s:get_body()
-  fd:write(body)
-end)
-
-copas.addthread(function()
-  local response_headers, s2 = http2.request("localhost", 8080, nil, h2)
-
-  --for _, h in ipairs(response_headers) do
-  --  for name, value in pairs(h) do
-  --    print(name, value)
-  --  end
-  --end
-
-  local fd = io.open("s2", "w")
-  local body = s2:get_body()
-  fd:write(body)
-end)
-
-copas.addthread(function()
-  local response_headers, s3 = http2.request("localhost", 8080, nil, h3)
-
-  --for _, h in ipairs(response_headers) do
-  --  for name, value in pairs(h) do
-  --    print(name, value)
-  --  end
-  --end
-
-  local fd = io.open("s3", "w")
-  local body = s3:get_body()
   fd:write(body)
 end)
 

@@ -1,4 +1,5 @@
 local hpack = require "hpack"
+local copas = require "copas"
 
 local mt = {__index = {}}
 
@@ -115,28 +116,17 @@ function mt.__index:get_headers()
   return table.remove(self.headers, 1)
 end
 
-local function next_data(conn, stream)
-  local ftype, flags, stream_id, data_payload
+function mt.__index:get_body()
+  local body = {}
+  local conn = self.connection
   while true do
-    ftype, flags, stream_id, data_payload = conn:recv_frame()
+    local ftype, flags, stream_id, payload = conn:recv_frame()
     local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
-    parser(s, flags, data_payload)
-    if stream_id == stream.id then break end
-  end
-  return flags
-end
-
-function mt.__index:get_body()
-  local conn = self.connection
-  local body = {}
-  while true do
-    local flags = next_data(conn, self)
+    parser(s, flags, payload)
     if flags == 0x01 then break end
   end
-  while #self.data > 0 do
-    table.insert(body, table.remove(self.data, 1))
-  end
+  while #self.data > 0 do table.insert(body, table.remove(self.data, 1)) end
   return table.concat(body)
 end
 
@@ -150,6 +140,9 @@ local function new(connection)
     headers = {},
     window = 65535
   }, mt)
+  stream.id = connection.max_stream_id + 2
+  connection.max_stream_id = stream.id
+  connection.streams[stream.id] = stream
   return stream
 end
 

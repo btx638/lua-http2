@@ -1,5 +1,7 @@
 local hpack = require "hpack"
 local stream = require "stream"
+local socket = require "socket"
+local copas = require "copas"
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",
@@ -46,12 +48,13 @@ end
 
 -- The client connection preface is sent upon connection establishment
 -- It MUST be followed by a SETTINGS frame
-local function initiate_connection(conn)
+local function initiate_connection(conn, host, port)
   local i = 0
   local t = {}
   local stream0 = stream.new(conn)
   stream0.id = 0
   conn.streams[0] = stream0
+  conn.max_stream_id = 1
   -- Settings parameters indexed both as names and as hexadecimal identifiers
   for id = 0x1, 0x6 do
     settings_parameters[settings_parameters[id]] = id
@@ -76,19 +79,20 @@ local function initiate_connection(conn)
   conn.hpack_context = hpack.new(server_table_size or default_table_size)
 end
 
-local function new(socket)
+local function new(host, port)
   local connection = setmetatable({
-    client = socket,
-    max_stream_id = 1,
+    client = nil,
+    max_stream_id = -2,
     hpack_context = nil,
     server_settings = {},
     streams = {},
-    next_stream = {},
     settings_parameters = settings_parameters,
     default_settings = default_settings,
     window = 65535
   }, mt)
-  initiate_connection(connection)
+  connection.client = copas.wrap(socket.tcp())
+  connection.client:connect(host, port)
+  initiate_connection(connection, host, port)
   return connection
 end
 
