@@ -39,9 +39,8 @@ end
 
 function mt.__index:get_server_settings()
   local s = self.streams[0]
-  local _, flags, _, settings_payload = self:recv_frame()
-  local parser = stream.frame_parser[0x4]
-  local server_settings = parser(s, flags, settings_payload)
+  local ftype, flags, _, settings_payload = self:recv_frame()
+  local server_settings = s:parse_frame(ftype, flags, settings_payload)
   return server_settings
 end
 
