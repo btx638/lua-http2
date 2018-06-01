@@ -10,7 +10,7 @@ frame_parser[0x0] = function(stream, flags, payload)
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
   table.insert(stream.data, payload)
-  return end_stream
+  if end_stream then table.insert(stream.data, "end_stream") end
 end
 
 -- HEADERS frame parser
@@ -112,26 +112,27 @@ local function headers_handler(stream)
     local header = copas.receive(conn.client, 9)
     local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
     local payload = copas.receive(conn.client, length)
+    print(ftype, stream_id)
     stream_id = stream_id & 0x7fffffff
     local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
-    local res = parser(s, flags, payload)
+    parser(s, flags, payload)
   end
 end
 
 local function body_handler(stream)
   copas.sleep(0)
   local conn = stream.connection
-  while true do
+  while stream.data[#stream.data] ~= "end_stream" do
     local header = copas.receive(conn.client, 9)
     local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
     local payload = copas.receive(conn.client, length)
     stream_id = stream_id & 0x7fffffff
     local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
-    local body = parser(s, flags, payload)
-    if body then break end
+    parser(s, flags, payload)
   end
+  table.remove(stream.data)
 end
 
 function mt.__index:get_headers()
