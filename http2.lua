@@ -1,6 +1,6 @@
-local connection = require "connection"
-local stream = require "stream"
-local hpack = require "hpack"
+local connection = require "http2.connection"
+local stream = require "http2.stream"
+local hpack = require "http2.hpack"
 
 local function request(host, port, body, headers)
   if headers == nil then

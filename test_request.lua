@@ -19,7 +19,14 @@ table.insert(h3, {[":path"] = "/index3.html"})
 table.insert(h3, {[":scheme"] = "http"})
 table.insert(h3, {[":authority"] = "localhost:8080"})
 
+local fd = assert(io.open("fuck", "w"))
 local response_headers, s = http2.request("localhost", 8080, nil, h1)
-local fd = assert(io.open("s1", "w"))
 local body = s:get_body()
+
+for _, header in ipairs(response_headers) do
+  for name, value in pairs(header) do
+    print(name, value)
+  end
+end
+
 fd:write(body)
