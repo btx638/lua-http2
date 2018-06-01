@@ -112,7 +112,6 @@ local function headers_handler(stream)
     local header = copas.receive(conn.client, 9)
     local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
     local payload = copas.receive(conn.client, length)
-    print(ftype, stream_id)
     stream_id = stream_id & 0x7fffffff
     local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]

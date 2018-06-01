@@ -1,18 +1,18 @@
 local connection = require "http2.connection"
 local stream = require "http2.stream"
 local hpack = require "http2.hpack"
+local url = require "socket.url"
 
-local function request(host, port, body, headers)
+local function request(uri, body, headers)
+  local parsed_uri = url.parse(uri)
   if headers == nil then
     headers = {}
-    fields = {}
-    table.insert(fields, {[":method"] = "GET"})
-    table.insert(fields, {[":path"] = "/"})
-    table.insert(fields, {[":scheme"] = "http"})
-    table.insert(fields, {[":authority"] = "localhost:8080"})
-    table.insert(headers, fields)
+    table.insert(headers, {[":method"] = "GET"})
+    table.insert(headers, {[":path"] = parsed_uri.path})
+    table.insert(headers, {[":scheme"] = parsed_uri.scheme})
+    table.insert(headers, {[":authority"] = parsed_uri.authority})
   end
-  local conn = connection.new(host, port)
+  local conn = connection.new(parsed_uri.host, parsed_uri.port)
   local stream0 = conn.streams[0]
   stream0:send_window_update("1073741823")
   local s = stream.new(conn)
