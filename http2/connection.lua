@@ -1,5 +1,5 @@
-local hpack = require "hpack"
-local stream = require "stream"
+local hpack = require "http2.hpack"
+local stream = require "http2.stream"
 local socket = require "socket"
 local copas = require "copas"
 

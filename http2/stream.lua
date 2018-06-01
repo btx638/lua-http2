@@ -1,4 +1,4 @@
-local hpack = require "hpack"
+local hpack = require "http2.hpack"
 local copas = require "copas"
 
 local mt = {__index = {}}
@@ -10,6 +10,7 @@ frame_parser[0x0] = function(stream, flags, payload)
   local end_stream = (flags & 0x1) ~= 0
   local padded = (flags & 0x8) ~= 0
   table.insert(stream.data, payload)
+  return end_stream
 end
 
 -- HEADERS frame parser
@@ -29,7 +30,6 @@ frame_parser[0x1] = function(stream, flags, payload)
   end
   local header_list = hpack.decode(stream.connection.hpack_context, payload)
   table.insert(stream.headers, header_list)
-  return header_list
 end
 
 -- PRIORITY frame parser
@@ -105,29 +105,45 @@ function mt.__index:send_headers(headers, body)
   end
 end
 
-function mt.__index:get_headers()
-  local conn = self.connection
-  while  #self.headers == 0 do
-    local ftype, flags, stream_id, payload = conn:recv_frame()
+local function headers_handler(stream)
+  copas.sleep(0)
+  local conn = stream.connection
+  while #stream.headers == 0 do
+    local header = copas.receive(conn.client, 9)
+    local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
+    local payload = copas.receive(conn.client, length)
+    stream_id = stream_id & 0x7fffffff
     local s = conn.streams[stream_id]
     local parser = frame_parser[ftype]
     local res = parser(s, flags, payload)
   end
+end
+
+local function body_handler(stream)
+  copas.sleep(0)
+  local conn = stream.connection
+  while true do
+    local header = copas.receive(conn.client, 9)
+    local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
+    local payload = copas.receive(conn.client, length)
+    stream_id = stream_id & 0x7fffffff
+    local s = conn.streams[stream_id]
+    local parser = frame_parser[ftype]
+    local body = parser(s, flags, payload)
+    if body then break end
+  end
+end
+
+function mt.__index:get_headers()
+  copas.addthread(headers_handler, self)
+  copas.loop()
   return table.remove(self.headers, 1)
 end
 
 function mt.__index:get_body()
-  local body = {}
-  local conn = self.connection
-  while true do
-    local ftype, flags, stream_id, payload = conn:recv_frame()
-    local s = conn.streams[stream_id]
-    local parser = frame_parser[ftype]
-    parser(s, flags, payload)
-    if flags == 0x01 then break end
-  end
-  while #self.data > 0 do table.insert(body, table.remove(self.data, 1)) end
-  return table.concat(body)
+  copas.addthread(body_handler, self)
+  copas.loop()
+  return table.concat(self.data)
 end
 
 local function new(connection)
