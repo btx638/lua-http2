@@ -1,19 +1,5 @@
 local static_table = {}
 
-local function new(HEADER_TABLE_SIZE)
-  local self = {
-    dynamic_table = {},
-    dynamic_table_size = 0,
-    maxsize = HEADER_TABLE_SIZE or 0,
-    dynamic_table_maxsize = nil,
-    dynamic_table_head = 1,
-    dynamic_table_tail = 0,
-    dynamic_names_to_indexes = {}
-  }
-  self.dynamic_table_maxsize = self.maxsize
-  return self
-end
-
 local function evict(self)
   local old_head = self.dynamic_table_head
   if old_head > self.dynamic_table_tail then return false end -- can it happen?
@@ -546,6 +532,20 @@ local function serialize(self, name, value, huffman)
   return "\64" .. encode_integer(#name, 7, 0) .. name .. encode_integer(#value, 7, 0) .. value
   -- 6.2.2. Literal Header Field without Indexing?
   -- 6.2.3. Literal Header Field Never Indexed?
+end
+
+local function new(HEADER_TABLE_SIZE)
+  local self = {
+    dynamic_table = {},
+    dynamic_table_size = 0,
+    maxsize = HEADER_TABLE_SIZE or 0,
+    dynamic_table_maxsize = nil,
+    dynamic_table_head = 1,
+    dynamic_table_tail = 0,
+    dynamic_names_to_indexes = {}
+  }
+  self.dynamic_table_maxsize = self.maxsize
+  return self
 end
 
 local function encode(self, header_list)
