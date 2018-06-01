@@ -1,7 +1,6 @@
 local hpack = require "http2.hpack"
 local stream = require "http2.stream"
 local socket = require "socket"
-local copas = require "copas"
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",
