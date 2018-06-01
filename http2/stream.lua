@@ -67,7 +67,7 @@ end
 
 function mt.__index:send_window_update(size)
   local conn = self.connection
-  conn.send_frame(conn, 0x8, 0x0, self.id, string.pack(">I4", size))
+  conn:send_frame(0x8, 0x0, self.id, string.pack(">I4", size))
 end
 
 function mt.__index:send_headers(headers, body)
@@ -75,15 +75,16 @@ function mt.__index:send_headers(headers, body)
   local header_block = hpack.encode(conn.hpack_context, headers)
   if body then
     local fsize = conn.server_settings.MAX_FRAME_SIZE
+    conn:send_frame(0x1, 0x4, self.id, header_block)
     for i = 1, #body, fsize do
       if i + fsize >= #body then
-        conn.send_frame(conn, 0x0, 0x1, self.id, string.sub(body, i))
+        conn:send_frame(0x0, 0x1, self.id, string.sub(body, i))
       else
-        conn.send_frame(conn, 0x0, 0x0, self.id, string.sub(body, i, i + fsize - 1))
+        conn:send_frame(0x0, 0x0, self.id, string.sub(body, i, i + fsize - 1))
       end
     end
   else
-    conn.send_frame(conn, 0x1, 0x4 | 0x1, self.id, header_block)
+    conn:send_frame(0x1, 0x4 | 0x1, self.id, header_block)
   end
 end
 
