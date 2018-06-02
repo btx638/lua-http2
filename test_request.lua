@@ -10,6 +10,7 @@ table.insert(headers, {[":authority"] = "localhost:8080"})
 local fd = io.open("request_out", "w")
 local response_headers, s = http2.request("http://localhost:8080/")
 local body = s:get_body()
+s:encode_rst_stream(0x0)
 s:encode_goaway(s.connection.max_server_streamid, 0x0)
 
 for _, header in ipairs(response_headers) do
