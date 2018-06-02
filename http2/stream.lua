@@ -100,17 +100,36 @@ function mt.__index:encode_window_update(size)
   conn:send_frame(0x8, 0x0, self.id, string.pack(">I4", size))
 end
 
+function mt.__index:encode_data(payload, end_stream, padded)
+  local conn = self.connection
+  local flags = 0
+  local pad_length = ""
+  local padding = ""
+  if end_stream then
+    flags = flags | 0x1
+  end
+  if padded then
+    flags = flags | 0x8
+    pad_length = string.pack(">B", padded)
+    padding = ("\0"):rep(padded)
+  end
+  payload = pad_length .. payload .. padding
+  self.window = self.window - #payload
+  self.connection.window = self.connection.window - #payload
+  conn:send_frame(0x0, flags, self.id, payload)
+end
+
 function mt.__index:encode_headers(headers, body)
   local conn = self.connection
   local header_block = hpack.encode(conn.hpack_context, headers)
   if body then
     local fsize = conn.server_settings.MAX_FRAME_SIZE
     conn:send_frame(0x1, 0x4, self.id, header_block)
-    for i = 1, #body, fsize do
+    for i = 0, #body, fsize do
       if i + fsize >= #body then
-        conn:send_frame(0x0, 0x1, self.id, string.sub(body, i))
+        self:encode_data(string.sub(body, i + 1), true)
       else
-        conn:send_frame(0x0, 0x0, self.id, string.sub(body, i, i + fsize - 1))
+        self:encode_data(string.sub(body, i + 1, i + fsize), false)
       end
     end
   else
