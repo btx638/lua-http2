@@ -15,9 +15,14 @@ local function new(connection, id)
   }, mt)
   if id then
     stream.id = id
+    if id % 2 == 0 then
+      stream.connection.max_server_streamid = math.max(stream.connection.max_server_streamid, id)
+    else
+      stream.connection.max_client_streamid = math.max(stream.connection.max_client_streamid, id)
+    end
   else
-    stream.id = stream.connection.max_client_streamid + 2
-    stream.connection.max_client_streamid = stream.id
+    stream.id = stream.connection.max_client_streamid
+    stream.connection.max_client_streamid = stream.id + 2
   end
   stream.connection.streams[stream.id] = stream
   return stream
@@ -70,7 +75,8 @@ function mt.__index:parse_frame(ftype, flags, payload)
     -- PING
   elseif ftype == 0x7 then
     -- GOAWAY
-
+    local last_stream_id = string.unpack(">I4I4", payload)
+    self.connection.last_stream_id = last_stream_id
   elseif ftype == 0x8 then
     -- WINDOW_UPDATE
     local bytes = string.unpack(">I4", payload)
@@ -106,6 +112,13 @@ function mt.__index:encode_headers(headers, body)
   else
     conn:send_frame(0x1, 0x4 | 0x1, self.id, header_block)
   end
+end
+
+function mt.__index:encode_goaway(last_stream_id, error_code, debug_data)
+  local conn = self.connection
+  local payload = string.pack(">I4I4", last_stream_id, error_code)
+  if debug_data then payload = payload .. debug_data end
+  conn:send_frame(0x7, 0x0, 0, payload)
 end
 
 local function headers_handler(stream)

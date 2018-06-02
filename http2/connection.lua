@@ -14,7 +14,7 @@ local settings_parameters = {
 
 local default_settings = {
   HEADER_TABLE_SIZE      = 4096,
-  ENABLE_PUSH            = 1,
+  ENABLE_PUSH            = 0,
   MAX_CONCURRENT_STREAMS = 100,
   INITIAL_WINDOW_SIZE    = 65535,
   MAX_FRAME_SIZE         = 16384,
@@ -36,7 +36,7 @@ function mt.__index:step()
   local payload = copas.receive(self.client, length)
   stream_id = stream_id & 0x7fffffff
   local s = self.streams[stream_id]
-  if s == nil then s = stream.new(conn, stream_id) end
+  if s == nil then s = stream.new(self, stream_id) end
   s:parse_frame(ftype, flags, payload)
 end
 
@@ -52,14 +52,11 @@ function mt.__index:get_server_settings()
   copas.loop()
 end
 
--- The client connection preface is sent upon connection establishment
--- It MUST be followed by a SETTINGS frame
 local function initiate_connection(conn, host, port)
   local i = 0
   local t = {}
   conn.client = socket.tcp()
   conn.client:connect(host, port)
-  stream.new(conn, 0)
   -- Settings parameters indexed both as names and as hexadecimal identifiers
   for id = 0x1, 0x6 do
     settings_parameters[settings_parameters[id]] = id
@@ -73,11 +70,10 @@ local function initiate_connection(conn, host, port)
   end
   local payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
   conn:send_frame(0x4, 0, 0, payload)
-  -- The server connection preface consists of a potentially empty SETTINGS frame
-  -- It MUST be the first frame the server sends in the HTTP/2 connection
+  -- The first frame sent by the server MUST consist of a SETTINGS frame
   conn:get_server_settings()
   -- The SETTINGS frames received from a peer as part of the connection preface
-  -- MUST be acknowledged after sending the connection preface.]]
+  -- MUST be acknowledged after sending the connection preface
   conn:send_frame(0x4, 0x1, 0, "")
   local server_table_size = conn.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
@@ -87,14 +83,15 @@ end
 local function new(host, port)
   local connection = setmetatable({
     client = nil,
-    max_client_streamid = 1,
-    max_server_streamid = 2,
+    max_client_streamid = 3,
+    max_server_streamid = 0,
     hpack_context = nil,
     server_settings = {},
     streams = {},
     settings_parameters = settings_parameters,
     default_settings = default_settings,
-    window = 65535
+    window = 65535,
+    last_stream_id = 0
   }, mt)
   initiate_connection(connection, host, port)
   return connection
