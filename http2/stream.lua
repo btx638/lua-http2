@@ -92,6 +92,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
     end
   elseif ftype == 0x9 then
     -- COTINUATION
+    local end_headers = (flags & 0x4) ~= 0
   end
 end
 
@@ -149,6 +150,13 @@ function mt.__index:encode_rst_stream(error_code)
   local payload= string.pack(">I4", error_code)
   conn:send_frame(0x3, 0x0, self.id, payload)
   self:encode_window_update(#self.data)
+end
+
+function mt.__index:encode_continuation(payload, end_stream)
+  local conn = self.connection
+  local flags = 0x0
+  if end_stream then flags = flags | 0x4 end
+  send_frame(0x9, flags, self.id, payload)
 end
 
 local function headers_handler(stream)
