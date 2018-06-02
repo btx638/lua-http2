@@ -11,7 +11,8 @@ local function new(connection, id)
     parent = nil,
     headers = {},
     data = {},
-    window = 65535
+    window = 65535,
+    rst_stream_error = nil
   }, mt)
   if id then
     stream.id = id
@@ -56,6 +57,9 @@ function mt.__index:parse_frame(ftype, flags, payload)
     -- PRIORITY
   elseif ftype == 0x3 then
     -- RST_STREAM
+    local error_code = string.unpack(">I4", payload)
+    self.rst_stream_error = error_code
+    self.state = "closed"
   elseif ftype == 0x4 then
     -- SETTINGS
     local settings = self.connection.default_settings
@@ -119,6 +123,13 @@ function mt.__index:encode_goaway(last_stream_id, error_code, debug_data)
   local payload = string.pack(">I4I4", last_stream_id, error_code)
   if debug_data then payload = payload .. debug_data end
   conn:send_frame(0x7, 0x0, 0, payload)
+end
+
+function mt.__index:encode_rst_stream(error_code)
+  local conn = self.connection
+  local payload= string.pack(">I4", error_code)
+  conn:send_frame(0x3, 0x0, self.id, payload)
+  self:encode_window_update(#self.data)
 end
 
 local function headers_handler(stream)
