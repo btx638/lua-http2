@@ -3,6 +3,26 @@ local copas = require "copas"
 
 local mt = {__index = {}}
 
+local function new(connection, id)
+  local stream = setmetatable({
+    connection = connection,
+    state = "idle",
+    id = nil,
+    parent = nil,
+    headers = {},
+    data = {},
+    window = 65535
+  }, mt)
+  if id then
+    stream.id = id
+  else
+    stream.id = stream.connection.max_client_streamid + 2
+    stream.connection.max_client_streamid = stream.id
+  end
+  stream.connection.streams[stream.id] = stream
+  return stream
+end
+
 function mt.__index:parse_frame(ftype, flags, payload)
   if ftype == 0x0 then
     -- DATA
@@ -33,24 +53,24 @@ function mt.__index:parse_frame(ftype, flags, payload)
     -- RST_STREAM
   elseif ftype == 0x4 then
     -- SETTINGS
-    local server_settings = self.connection.default_settings
-    local ack = flags & 0x1 ~= 0
+    local settings = self.connection.default_settings
+    local ack = (flags & 0x1) ~= 0
     if ack then
       return
-    else
-      for i = 1, #payload, 6 do
-        id, v = string.unpack(">I2 I4", payload, i)
-        server_settings[self.connection.settings_parameters[id]] = v
-        server_settings[id] = v
-      end
     end
-    return server_settings
+    for i = 1, #payload, 6 do
+      id, v = string.unpack(">I2 I4", payload, i)
+      settings[self.connection.settings_parameters[id]] = v
+      settings[id] = v
+    end
+    self.connection.server_settings = settings
   elseif ftype == 0x5 then
     -- PUSH_PROMISE
   elseif ftype == 0x6 then
     -- PING
   elseif ftype == 0x7 then
     -- GOAWAY
+
   elseif ftype == 0x8 then
     -- WINDOW_UPDATE
     local bytes = string.unpack(">I4", payload)
@@ -92,12 +112,7 @@ local function headers_handler(stream)
   copas.sleep(0)
   local conn = stream.connection
   while #stream.headers == 0 do
-    local header = copas.receive(conn.client, 9)
-    local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
-    local payload = copas.receive(conn.client, length)
-    stream_id = stream_id & 0x7fffffff
-    local s = conn.streams[stream_id]
-    s:parse_frame(ftype, flags, payload)
+    conn:step()
   end
 end
 
@@ -105,12 +120,7 @@ local function body_handler(stream)
   copas.sleep(0)
   local conn = stream.connection
   while stream.data[#stream.data] ~= "end_stream" do
-    local header = copas.receive(conn.client, 9)
-    local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
-    local payload = copas.receive(conn.client, length)
-    stream_id = stream_id & 0x7fffffff
-    local s = conn.streams[stream_id]
-    s:parse_frame(ftype, flags, payload)
+    conn:step()
   end
   table.remove(stream.data)
 end
@@ -125,22 +135,6 @@ function mt.__index:get_body()
   copas.addthread(body_handler, self)
   copas.loop()
   return table.concat(self.data)
-end
-
-local function new(connection)
-  local stream = setmetatable({
-    connection = connection,
-    state = "idle",
-    id = nil,
-    parent = nil,
-    data = {},
-    headers = {},
-    window = 65535
-  }, mt)
-  stream.id = connection.max_stream_id + 2
-  connection.max_stream_id = stream.id
-  connection.streams[stream.id] = stream
-  return stream
 end
 
 local stream = {

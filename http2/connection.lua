@@ -1,6 +1,7 @@
 local hpack = require "http2.hpack"
 local stream = require "http2.stream"
 local socket = require "socket"
+local copas = require "copas"
 
 local settings_parameters = {
   [0x1] = "HEADER_TABLE_SIZE",
@@ -28,20 +29,27 @@ function mt.__index:send_frame(ftype, flags, stream_id, payload)
   self.client:send(payload)
 end
 
-function mt.__index:recv_frame()
+function mt.__index:step()
   -- All frames begin with a fixed 9-octet header followed by a variable-length payload.
-  local header = self.client:receive(9)
+  local header = copas.receive(self.client, 9)
   local length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
-  local payload = self.client:receive(length)
+  local payload = copas.receive(self.client, length)
   stream_id = stream_id & 0x7fffffff
-  return ftype, flags, stream_id, payload
+  local s = self.streams[stream_id]
+  if s == nil then s = stream.new(conn, stream_id) end
+  s:parse_frame(ftype, flags, payload)
+end
+
+local function handle_server_settings(conn)
+  copas.sleep(0)
+  while #conn.server_settings == 0 do
+    conn:step()
+  end
 end
 
 function mt.__index:get_server_settings()
-  local s = self.streams[0]
-  local ftype, flags, _, settings_payload = self:recv_frame()
-  local server_settings = s:parse_frame(ftype, flags, settings_payload)
-  return server_settings
+  copas.addthread(handle_server_settings, self)
+  copas.loop()
 end
 
 -- The client connection preface is sent upon connection establishment
@@ -49,10 +57,9 @@ end
 local function initiate_connection(conn, host, port)
   local i = 0
   local t = {}
-  local stream0 = stream.new(conn)
-  stream0.id = 0
-  conn.streams[0] = stream0
-  conn.max_stream_id = 1
+  conn.client = socket.tcp()
+  conn.client:connect(host, port)
+  stream.new(conn, 0)
   -- Settings parameters indexed both as names and as hexadecimal identifiers
   for id = 0x1, 0x6 do
     settings_parameters[settings_parameters[id]] = id
@@ -68,7 +75,7 @@ local function initiate_connection(conn, host, port)
   conn:send_frame(0x4, 0, 0, payload)
   -- The server connection preface consists of a potentially empty SETTINGS frame
   -- It MUST be the first frame the server sends in the HTTP/2 connection
-  conn.server_settings = conn:get_server_settings()
+  conn:get_server_settings()
   -- The SETTINGS frames received from a peer as part of the connection preface
   -- MUST be acknowledged after sending the connection preface.]]
   conn:send_frame(0x4, 0x1, 0, "")
@@ -80,7 +87,8 @@ end
 local function new(host, port)
   local connection = setmetatable({
     client = nil,
-    max_stream_id = -2,
+    max_client_streamid = 1,
+    max_server_streamid = 2,
     hpack_context = nil,
     server_settings = {},
     streams = {},
@@ -88,8 +96,6 @@ local function new(host, port)
     default_settings = default_settings,
     window = 65535
   }, mt)
-  connection.client = socket.tcp()
-  connection.client:connect(host, port)
   initiate_connection(connection, host, port)
   return connection
 end
