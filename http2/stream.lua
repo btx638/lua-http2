@@ -85,12 +85,12 @@ function mt.__index:parse_frame(ftype, flags, payload)
   end
 end
 
-function mt.__index:send_window_update(size)
+function mt.__index:encode_window_update(size)
   local conn = self.connection
   conn:send_frame(0x8, 0x0, self.id, string.pack(">I4", size))
 end
 
-function mt.__index:send_headers(headers, body)
+function mt.__index:encode_headers(headers, body)
   local conn = self.connection
   local header_block = hpack.encode(conn.hpack_context, headers)
   if body then

@@ -14,10 +14,10 @@ local function request(uri, body, headers)
   end
   local conn = connection.new(parsed_uri.host, parsed_uri.port)
   local stream0 = conn.streams[0]
-  stream0:send_window_update("1073741823")
+  stream0:encode_window_update("1073741823")
   local s = stream.new(conn)
-  s:send_headers(headers, body)
-  s:send_window_update("1073741823")
+  s:encode_headers(headers, body)
+  s:encode_window_update("1073741823")
   local response_headers = s:get_headers()
   return response_headers, s
 end

@@ -19,18 +19,18 @@ table.insert(h3, {[":authority"] = "localhost:8080"})
 
 local conn = connection.new("localhost", 8080)
 local stream0 = conn.streams[0]
-stream0:send_window_update("1073741823")
+stream0:encode_window_update("1073741823")
 
 local s1 = stream.new(conn)
 local s2 = stream.new(conn)
 local s3 = stream.new(conn)
 
-s1:send_headers(h1, nil)
-s1:send_window_update("1073741823")
-s2:send_headers(h2, nil)
-s2:send_window_update("1073741823")
-s3:send_headers(h3, nil)
-s3:send_window_update("1073741823")
+s1:encode_headers(h1, nil)
+s1:encode_window_update("1073741823")
+s2:encode_headers(h2, nil)
+s2:encode_window_update("1073741823")
+s3:encode_headers(h3, nil)
+s3:encode_window_update("1073741823")
 
 local response_headers1 = s1:get_headers()
 local response_headers2 = s2:get_headers()
