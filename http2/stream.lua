@@ -42,18 +42,24 @@ function mt.__index:parse_frame(ftype, flags, payload)
     local end_stream = (flags & 0x1) ~= 0
     local end_headers = (flags & 0x4) ~= 0
     local padded = (flags & 0x8) ~= 0
+    local seek
     local pad_length
     if padded then
-      pad_length = string.unpack(">B", headers_payload)
+      seek = 2
+      pad_length = string.unpack(">B", payload)
     else
+      seek = 1
       pad_length = 0
     end
-    local headers_payload_len = #payload - pad_length
     if pad_length > 0 then
       payload = payload:sub(1, - pad_length - 1)
     end
-    local header_list = hpack.decode(self.connection.hpack_context, payload)
-    table.insert(self.headers, header_list)
+    if end_headers then
+      local header_list = hpack.decode(self.connection.hpack_context, payload)
+      table.insert(self.headers, header_list)
+    else
+      self.connection.header_block_fragment = {payload}
+    end
   elseif ftype == 0x2 then
     -- PRIORITY
   elseif ftype == 0x3 then
@@ -94,12 +100,13 @@ function mt.__index:parse_frame(ftype, flags, payload)
   elseif ftype == 0x9 then
     -- COTINUATION
     local end_headers = (flags & 0x4) ~= 0
+    table.insert(self.connection.header_block_fragment, payload)
+    if end_headers then
+      payload = table.concat(self.connection.header_block_fragment)
+      local header_list = hpack.decode(self.connection.hpack_context, payload)
+      table.insert(self.headers, header_list)
+    end
   end
-end
-
-function mt.__index:encode_window_update(size)
-  local conn = self.connection
-  conn:send_frame(0x8, 0x0, self.id, string.pack(">I4", size))
 end
 
 function mt.__index:encode_data(payload, end_stream, padded)
@@ -124,9 +131,29 @@ end
 function mt.__index:encode_headers(headers, body)
   local conn = self.connection
   local header_block = hpack.encode(conn.hpack_context, headers)
+  local max_fsize = conn.server_settings.MAX_FRAME_SIZE
+  local payload
+  local flags = 0x0
+  if body == nil then
+    flags = 0x1
+  end
+  if #header_block <= max_fsize then
+    conn:send_frame(0x1, 0x4 | flags, self.id, header_block)
+  else
+    payload = header_block:sub(1, max_fsize)
+    conn:send_frame(0x1, flags, self.id, payload)
+    local remain = #header_block - max_fsize
+    local fsize = max_fsize
+    while fsize < remain do
+      payload = header_block:sub(fsize + 1, fsize + max_fsize)
+      fsize = fsize + max_fsize
+      self:encode_continuation(payload, false)
+    end
+    payload = header_block:sub(fsize + 1)
+    self:encode_continuation(payload, true)
+  end
   if body then
     local fsize = conn.server_settings.MAX_FRAME_SIZE
-    conn:send_frame(0x1, 0x4, self.id, header_block)
     for i = 0, #body, fsize do
       if i + fsize >= #body then
         self:encode_data(string.sub(body, i + 1), true)
@@ -134,8 +161,6 @@ function mt.__index:encode_headers(headers, body)
         self:encode_data(string.sub(body, i + 1, i + fsize), false)
       end
     end
-  else
-    conn:send_frame(0x1, 0x4 | 0x1, self.id, header_block)
   end
 end
 
@@ -174,11 +199,16 @@ function mt.__index:encode_goaway(last_stream_id, error_code, debug_data)
   conn:send_frame(0x7, 0x0, 0, payload)
 end
 
+function mt.__index:encode_window_update(size)
+  local conn = self.connection
+  conn:send_frame(0x8, 0x0, self.id, string.pack(">I4", size))
+end
+
 function mt.__index:encode_continuation(payload, end_stream)
   local conn = self.connection
   local flags = 0x0
   if end_stream then flags = flags | 0x4 end
-  send_frame(0x9, flags, self.id, payload)
+  conn:send_frame(0x9, flags, self.id, payload)
 end
 
 local function headers_handler(stream)
