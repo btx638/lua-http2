@@ -138,18 +138,39 @@ function mt.__index:encode_headers(headers, body)
   end
 end
 
-function mt.__index:encode_goaway(last_stream_id, error_code, debug_data)
-  local conn = self.connection
-  local payload = string.pack(">I4I4", last_stream_id, error_code)
-  if debug_data then payload = payload .. debug_data end
-  conn:send_frame(0x7, 0x0, 0, payload)
-end
-
 function mt.__index:encode_rst_stream(error_code)
   local conn = self.connection
   local payload= string.pack(">I4", error_code)
   conn:send_frame(0x3, 0x0, self.id, payload)
   self:encode_window_update(#self.data)
+end
+
+function mt.__index:encode_settings(ack, settings)
+  local conn = self.connection
+  local flags, payload
+  local t = {}
+  local i = 0
+  if ack then
+    flags = 0x1
+    payload = ""
+    conn:send_frame(0x4, 0x1, 0, payload)
+  else
+    flags = 0x0
+    for k, v in ipairs(conn.default_settings) do
+      t[i * 2 + 1] = k
+      t[i * 2 + 2] = v
+      i = i + 1
+    end
+    payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
+    conn:send_frame(0x4, 0x0, self.id, payload)
+  end
+end
+
+function mt.__index:encode_goaway(last_stream_id, error_code, debug_data)
+  local conn = self.connection
+  local payload = string.pack(">I4I4", last_stream_id, error_code)
+  if debug_data then payload = payload .. debug_data end
+  conn:send_frame(0x7, 0x0, 0, payload)
 end
 
 function mt.__index:encode_continuation(payload, end_stream)

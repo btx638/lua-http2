@@ -21,6 +21,12 @@ local default_settings = {
   MAX_HEADER_LIST_SIZE   = 25600
 }
 
+-- Settings indexed both as names and as hexadecimal identifiers
+for id = 0x1, 0x6 do
+  settings_parameters[settings_parameters[id]] = id
+  default_settings[id] = default_settings[settings_parameters[id]]
+end
+
 local mt = {__index = {}}
 
 function mt.__index:send_frame(ftype, flags, stream_id, payload)
@@ -53,28 +59,16 @@ function mt.__index:get_server_settings()
 end
 
 local function initiate_connection(conn, host, port)
-  local i = 0
-  local t = {}
+  local s = stream.new(conn, 0)
   conn.client = socket.tcp()
   conn.client:connect(host, port)
-  -- Settings parameters indexed both as names and as hexadecimal identifiers
-  for id = 0x1, 0x6 do
-    settings_parameters[settings_parameters[id]] = id
-    default_settings[id] = default_settings[settings_parameters[id]]
-  end
   conn.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-  for k, v in ipairs(default_settings) do
-    t[i * 2 + 1] = k
-    t[i * 2 + 2] = v
-    i = i + 1
-  end
-  local payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
-  conn:send_frame(0x4, 0, 0, payload)
+  s:encode_settings(false)
   -- The first frame sent by the server MUST consist of a SETTINGS frame
   conn:get_server_settings()
   -- The SETTINGS frames received from a peer as part of the connection preface
   -- MUST be acknowledged after sending the connection preface
-  conn:send_frame(0x4, 0x1, 0, "")
+  s:encode_settings(true)
   local server_table_size = conn.server_settings.HEADER_TABLE_SIZE
   local default_table_size = default_settings.HEADER_TABLE_SIZE
   conn.hpack_context = hpack.new(server_table_size or default_table_size)
