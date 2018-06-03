@@ -58,22 +58,6 @@ function mt.__index:get_server_settings()
   copas.loop()
 end
 
-local function initiate_connection(conn, host, port)
-  local s = stream.new(conn, 0)
-  conn.client = socket.tcp()
-  conn.client:connect(host, port)
-  conn.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-  s:encode_settings(false)
-  -- The first frame sent by the server MUST consist of a SETTINGS frame
-  conn:get_server_settings()
-  -- The SETTINGS frames received from a peer as part of the connection preface
-  -- MUST be acknowledged after sending the connection preface
-  s:encode_settings(true)
-  local server_table_size = conn.server_settings.HEADER_TABLE_SIZE
-  local default_table_size = default_settings.HEADER_TABLE_SIZE
-  conn.hpack_context = hpack.new(server_table_size or default_table_size)
-end
-
 local function new(host, port)
   local connection = setmetatable({
     client = nil,
@@ -85,9 +69,22 @@ local function new(host, port)
     settings_parameters = settings_parameters,
     default_settings = default_settings,
     window = 65535,
-    last_stream_id = 0
+    last_stream_id = 0,
+    header_block_fragment = nil
   }, mt)
-  initiate_connection(connection, host, port)
+  local s = stream.new(connection, 0)
+  connection.client = socket.tcp()
+  connection.client:connect(host, port)
+  connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+  s:encode_settings(false)
+  -- The first frame sent by the server MUST consist of a SETTINGS frame
+  connection:get_server_settings()
+  -- The SETTINGS frames received from a peer as part of the connection preface
+  -- MUST be acknowledged after sending the connection preface
+  s:encode_settings(true)
+  local server_table_size = connection.server_settings.HEADER_TABLE_SIZE
+  local default_table_size = default_settings.HEADER_TABLE_SIZE
+  connection.hpack_context = hpack.new(server_table_size or default_table_size)
   return connection
 end
 
