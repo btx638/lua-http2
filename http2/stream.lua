@@ -14,18 +14,19 @@ local function new(connection, id)
     window = 65535,
     rst_stream_error = nil
   }, mt)
+  local conn = stream.connection
   if id then
     stream.id = id
     if id % 2 == 0 then
-      stream.connection.max_server_streamid = math.max(stream.connection.max_server_streamid, id)
+      conn.max_server_streamid = math.max(conn.max_server_streamid, id)
     else
-      stream.connection.max_client_streamid = math.max(stream.connection.max_client_streamid, id)
+      conn.max_client_streamid = math.max(conn.max_client_streamid, id)
     end
   else
-    stream.id = stream.connection.max_client_streamid
-    stream.connection.max_client_streamid = stream.id + 2
+    stream.id = conn.max_client_streamid
+    conn.max_client_streamid = stream.id + 2
   end
-  stream.connection.streams[stream.id] = stream
+  conn.streams[stream.id] = stream
   return stream
 end
 
