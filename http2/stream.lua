@@ -132,40 +132,24 @@ function mt.__index:encode_data(payload, end_stream, padded)
   conn:send_frame(0x0, flags, self.id, payload)
 end
 
-function mt.__index:encode_headers(headers, body)
+function mt.__index:encode_headers(payload, end_stream, end_headers, padded)
   local conn = self.connection
-  local header_block = hpack.encode(conn.hpack_context, headers)
-  local max_fsize = conn.server_settings.MAX_FRAME_SIZE
-  local payload
   local flags = 0x0
-  if body == nil then
-    flags = 0x1
+  local pad_length = ""
+  local padding = ""
+  if end_stream then
+    flags = flags | 0x1
   end
-  if #header_block <= max_fsize then
-    conn:send_frame(0x1, 0x4 | flags, self.id, header_block)
-  else
-    payload = header_block:sub(1, max_fsize)
-    conn:send_frame(0x1, flags, self.id, payload)
-    local remain = #header_block - max_fsize
-    local fsize = max_fsize
-    while fsize < remain do
-      payload = header_block:sub(fsize + 1, fsize + max_fsize)
-      fsize = fsize + max_fsize
-      self:encode_continuation(payload, false)
-    end
-    payload = header_block:sub(fsize + 1)
-    self:encode_continuation(payload, true)
+  if end_headers then
+    flags = flags | 0x4
   end
-  if body then
-    local fsize = conn.server_settings.MAX_FRAME_SIZE
-    for i = 0, #body, fsize do
-      if i + fsize >= #body then
-        self:encode_data(string.sub(body, i + 1), true)
-      else
-        self:encode_data(string.sub(body, i + 1, i + fsize), false)
-      end
-    end
+  if padded then
+    flags = flags | 0x8
+    pad_length = string.pack(">B", padded)
+    padding = ("\0"):rep(padded)
   end
+  payload = pad_length .. payload .. padding
+  conn:send_frame(0x1, flags, self.id, payload)
 end
 
 function mt.__index:encode_rst_stream(error_code)
@@ -242,6 +226,42 @@ function mt.__index:get_body()
   copas.addthread(body_handler, self)
   copas.loop()
   return table.concat(self.data)
+end
+
+function mt.__index:set_headers(headers, end_stream)
+  local conn = self.connection
+  local header_block = hpack.encode(conn.hpack_context, headers)
+  local max_fsize = conn.server_settings.MAX_FRAME_SIZE
+  local payload
+  if #header_block <= max_fsize then
+    self:encode_headers(header_block, end_stream, true)
+  else
+    payload = header_block:sub(1, max_fsize)
+    self:encode_headers(payload, end_stream, false)
+    local remain = #header_block - max_fsize
+    local fsize = max_fsize
+    while fsize < remain do
+      payload = header_block:sub(fsize + 1, fsize + max_fsize)
+      fsize = fsize + max_fsize
+      self:encode_continuation(payload, false)
+    end
+    payload = header_block:sub(fsize + 1)
+    self:encode_continuation(payload, true)
+  end
+end
+
+function mt.__index:set_body(body)
+  local conn = self.connection
+  if body then
+    local fsize = conn.server_settings.MAX_FRAME_SIZE
+    for i = 0, #body, fsize do
+      if i + fsize >= #body then
+        self:encode_data(string.sub(body, i + 1), true)
+      else
+        self:encode_data(string.sub(body, i + 1, i + fsize), false)
+      end
+    end
+  end
 end
 
 local stream = {

@@ -16,7 +16,8 @@ local function request(uri, body, headers)
   local stream0 = conn.streams[0]
   stream0:encode_window_update("1073741823")
   local s = stream.new(conn)
-  s:encode_headers(headers, body)
+  s:set_headers(headers, body == nil)
+  if body then s:set_body() end
   s:encode_window_update("1073741823")
   local response_headers = s:get_headers()
   return response_headers, s
