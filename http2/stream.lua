@@ -35,6 +35,10 @@ function mt.__index:parse_frame(ftype, flags, payload)
     -- DATA
     local end_stream = (flags & 0x1) ~= 0
     local padded = (flags & 0x8) ~= 0
+    if padded then
+      local pad_length = string.unpack(">B", payload)
+      payload = payload:sub(2, - pad_length - 1)
+    end
     table.insert(self.data, payload)
     if end_stream then table.insert(self.data, "end_stream") end
   elseif ftype == 0x1 then
