@@ -253,12 +253,12 @@ end
 function mt.__index:set_body(body)
   local conn = self.connection
   if body then
-    local fsize = conn.server_settings.MAX_FRAME_SIZE
-    for i = 0, #body, fsize do
-      if i + fsize >= #body then
+    local max_fsize = conn.server_settings.MAX_FRAME_SIZE
+    for i = 0, #body, max_fsize do
+      if i + max_fsize >= #body then
         self:encode_data(string.sub(body, i + 1), true)
       else
-        self:encode_data(string.sub(body, i + 1, i + fsize), false)
+        self:encode_data(string.sub(body, i + 1, i + max_fsize), false)
       end
     end
   end
