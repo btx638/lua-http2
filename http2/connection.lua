@@ -115,9 +115,7 @@ local function initiate_connection(conn)
 end
 
 local function dispatch(conn)
-  local i
   while true do
-    i = 0
     local req = table.remove(conn.pending, 1)
     if not req then
       copas.sleep(-1)
@@ -125,13 +123,19 @@ local function dispatch(conn)
       local s = conn.streams[req.stream_id]
       if s == nil then s = stream.new(conn, req.stream_id) end
       s:parse_frame(req.ftype, req.flags, req.payload)
+      if s.state == "closed" then
+        print(s.id)
+        conn.active_streams = conn.active_streams - 1
+        print(conn.active_streams)
+      end
     end
   end
 end
 
 local function receiver(conn)
-  local frame, err
+  local frame, err, s
   while true do
+    if conn.active_streams == 0 then copas.sleep(-1) end
     frame, err = getframe(conn)
     if err then print("err: ", err) end
     table.insert(conn.pending, frame)
@@ -144,6 +148,7 @@ local function new(host, port)
   local connection = setmetatable({
     client = nil,
     pending = {},
+    active_streams = 0,
     max_client_streamid = 3,
     max_server_streamid = 0,
     hpack_context = nil,
@@ -169,7 +174,7 @@ local function new(host, port)
       dispatch(connection)
     end)
 
-    copas.addthread(function()
+    connection.receiver = copas.addthread(function()
       copas.sleep(0)
       receiver(connection)
     end)

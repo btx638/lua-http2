@@ -25,6 +25,7 @@ local function new(connection, id)
   else
     stream.id = conn.max_client_streamid
     conn.max_client_streamid = stream.id + 2
+    conn.active_streams = conn.active_streams + 1
   end
   conn.streams[stream.id] = stream
   return stream
@@ -40,8 +41,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
       payload = payload:sub(2, - pad_length - 1)
     end
     table.insert(self.data, payload)
-    if end_stream then 
-      table.insert(self.data, "end_stream")
+    if end_stream then
       self.state = "closed"
     end
   elseif ftype == 0x1 then
@@ -228,7 +228,6 @@ end
 function mt.__index:get_body()
 --  copas.addthread(body_handler, self)
 --  copas.loop()
-  table.remove(self.data)
   return table.concat(self.data)
 end
 
