@@ -40,7 +40,10 @@ function mt.__index:parse_frame(ftype, flags, payload)
       payload = payload:sub(2, - pad_length - 1)
     end
     table.insert(self.data, payload)
-    if end_stream then table.insert(self.data, "end_stream") end
+    if end_stream then 
+      table.insert(self.data, "end_stream")
+      self.state = "closed"
+    end
   elseif ftype == 0x1 then
     -- HEADERS
     local end_stream = (flags & 0x1) ~= 0
@@ -199,32 +202,33 @@ function mt.__index:encode_continuation(payload, end_stream)
   conn:send_frame(0x9, flags, self.id, payload)
 end
 
-local function headers_handler(stream)
-  copas.sleep(0)
-  local conn = stream.connection
-  while #stream.headers == 0 do
-    conn:step()
-  end
-end
-
-local function body_handler(stream)
-  copas.sleep(0)
-  local conn = stream.connection
-  while stream.data[#stream.data] ~= "end_stream" do
-    conn:step()
-  end
-  table.remove(stream.data)
-end
+--local function headers_handler(stream)
+--  copas.sleep(0)
+--  local conn = stream.connection
+--  while #stream.headers == 0 do
+--    conn:step()
+--  end
+--end
+--
+--local function body_handler(stream)
+--  copas.sleep(0)
+--  local conn = stream.connection
+--  while stream.data[#stream.data] ~= "end_stream" do
+--    conn:step()
+--  end
+--  table.remove(stream.data)
+--end
 
 function mt.__index:get_headers()
-  copas.addthread(headers_handler, self)
-  copas.loop()
+--  copas.addthread(headers_handler, self)
+--  copas.loop()
   return table.remove(self.headers, 1)
 end
 
 function mt.__index:get_body()
-  copas.addthread(body_handler, self)
-  copas.loop()
+--  copas.addthread(body_handler, self)
+--  copas.loop()
+  table.remove(self.data)
   return table.concat(self.data)
 end
 

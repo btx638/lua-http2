@@ -1,5 +1,6 @@
 local connection = require "http2.connection"
 local stream = require "http2.stream"
+local copas = require "copas"
 
 local h1 = {}
 table.insert(h1, {[":method"] = "GET"})
@@ -31,6 +32,8 @@ s2:set_headers(h2, true)
 s2:encode_window_update("1073741823")
 s3:set_headers(h3, true)
 s3:encode_window_update("1073741823")
+
+copas.loop()
 
 local response_headers1 = s1:get_headers()
 local response_headers2 = s2:get_headers()

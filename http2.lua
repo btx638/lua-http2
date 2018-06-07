@@ -2,6 +2,7 @@ local connection = require "http2.connection"
 local stream = require "http2.stream"
 local hpack = require "http2.hpack"
 local url = require "socket.url"
+local copas = require "copas"
 
 local function request(uri, body, headers)
   local parsed_uri = url.parse(uri)
@@ -19,6 +20,7 @@ local function request(uri, body, headers)
   s:set_headers(headers, body == nil)
   if body then s:set_body() end
   s:encode_window_update("1073741823")
+  copas.loop()
   local response_headers = s:get_headers()
   return response_headers, s
 end
