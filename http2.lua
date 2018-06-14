@@ -67,6 +67,7 @@ local function dispatch(conn)
       if conn.recv_first_frame == false then
         s:encode_settings(false)
         s0 = conn.streams[0]
+        if s0 == nil then s0 = stream.new(conn, 0) end
         s0:encode_window_update("1073741823")
         conn.recv_first_frame = true
         copas.wakeup(conn.callback_conn)
