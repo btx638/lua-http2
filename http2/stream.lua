@@ -25,7 +25,6 @@ local function new(connection, id)
   else
     stream.id = conn.max_client_streamid
     conn.max_client_streamid = stream.id + 2
-    conn.active_streams = conn.active_streams + 1
   end
   conn.streams[stream.id] = stream
   return stream
@@ -87,6 +86,9 @@ function mt.__index:parse_frame(ftype, flags, payload)
       settings[id] = v
     end
     self.connection.server_settings = settings
+    local server_table_size = self.connection.server_settings.HEADER_TABLE_SIZE
+    local default_table_size = self.connection.default_settings.HEADER_TABLE_SIZE
+    self.connection.hpack_context = hpack.new(server_table_size or default_table_size)
   elseif ftype == 0x5 then
     -- PUSH_PROMISE
   elseif ftype == 0x6 then
@@ -180,6 +182,7 @@ function mt.__index:encode_settings(ack, settings)
     end
     payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
     conn:send_frame(0x4, 0x0, self.id, payload)
+    self:encode_settings(true)
   end
 end
 
@@ -202,32 +205,13 @@ function mt.__index:encode_continuation(payload, end_stream)
   conn:send_frame(0x9, flags, self.id, payload)
 end
 
---local function headers_handler(stream)
---  copas.sleep(0)
---  local conn = stream.connection
---  while #stream.headers == 0 do
---    conn:step()
---  end
---end
---
---local function body_handler(stream)
---  copas.sleep(0)
---  local conn = stream.connection
---  while stream.data[#stream.data] ~= "end_stream" do
---    conn:step()
---  end
---  table.remove(stream.data)
---end
-
 function mt.__index:get_headers()
---  copas.addthread(headers_handler, self)
---  copas.loop()
+  copas.wakeup(self.connection.receiver)
+  copas.sleep(-1)
   return table.remove(self.headers, 1)
 end
 
 function mt.__index:get_body()
---  copas.addthread(body_handler, self)
---  copas.loop()
   return table.concat(self.data)
 end
 
