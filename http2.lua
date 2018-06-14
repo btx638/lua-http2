@@ -55,27 +55,21 @@ local function getframe(conn)
   }
 end
 
-local function dispatch(conn)
-  while true do
-    local req = table.remove(conn.pending, 1)
-    if not req then
-      copas.sleep(-1)
-    else
-      local s = conn.streams[req.stream_id]
-      if s == nil then s = stream.new(conn, req.stream_id) end
-      s:parse_frame(req.ftype, req.flags, req.payload)
-      if conn.recv_first_frame == false then
-        s:encode_settings(false)
-        s0 = conn.streams[0]
-        if s0 == nil then s0 = stream.new(conn, 0) end
-        s0:encode_window_update("1073741823")
-        conn.recv_first_frame = true
-        copas.wakeup(conn.callback_conn)
-      end
-      if s.state == "closed" then
-        conn.stream_finished = true
-      end
-    end
+local function dispatch(conn, frame)
+  local s, s0
+  s = conn.streams[frame.stream_id]
+  if s == nil then s = stream.new(conn, frame.stream_id) end
+  s:parse_frame(frame.ftype, frame.flags, frame.payload)
+  if conn.recv_first_frame == false then
+    s:encode_settings(false)
+    s0 = conn.streams[0]
+    if s0 == nil then s0 = stream.new(conn, 0) end
+    s0:encode_window_update("1073741823")
+    conn.recv_first_frame = true
+    copas.wakeup(conn.callback_conn)
+  end
+  if s.state == "closed" then
+    conn.stream_finished = true
   end
 end
 
@@ -89,9 +83,7 @@ local function receiver(conn)
     end
     frame, err = getframe(conn)
     print(frame.ftype, frame.flags, frame.stream_id)
-    table.insert(conn.pending, frame)
-    copas.wakeup(conn.dispatch)
-    copas.sleep(0.0001)
+    dispatch(conn, frame)
   end
 end
 
@@ -105,7 +97,6 @@ local function connect(uri, callback)
     connection = setmetatable({
       client = nil,
       uri = parsed_uri,
-      pending = {},
       recv_first_frame = false,
       stream_finished = false,
       max_client_streamid = 3,
@@ -123,17 +114,13 @@ local function connect(uri, callback)
     connection.client:connect(parsed_uri.host, parsed_uri.port)
     connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 
-    connection.dispatch = copas.addthread(function()
-      dispatch(connection)
+    connection.callback_conn = copas.addthread(function()
+      copas.sleep(-1)
+      connection.callback = copas.addthread(callback, connection)
     end)
 
     connection.receiver = copas.addthread(function()
       receiver(connection)
-    end)
-
-    connection.callback_conn = copas.addthread(function()
-      copas.sleep(-1)
-      connection.callback = copas.addthread(callback, connection)
     end)
   end)
 end
