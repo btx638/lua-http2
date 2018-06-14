@@ -1,5 +1,5 @@
 local fd = io.open("dump.bin", "w")
-local hpack = require "hpack"
+local hpack = require "http2.hpack"
 local encoding_context = hpack.new(4096)
 --local header_block = hpack.encode(encoding_context, {[":method"] = "GET"})
 local header_block = hpack.encode(encoding_context, ({[1] = {[":method"] = "GET"},
