@@ -206,7 +206,6 @@ function mt.__index:encode_continuation(payload, end_stream)
 end
 
 function mt.__index:get_headers()
-  copas.wakeup(self.connection.receiver)
   copas.sleep(-1)
   return table.remove(self.headers, 1)
 end

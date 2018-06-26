@@ -33,6 +33,7 @@ end
 
 function callback_conn(conn)
   http2.request(conn, callback_req)
+  print("first request")
 
   h1 = {}
   table.insert(h1, {[":method"] = "GET"})
@@ -40,6 +41,7 @@ function callback_conn(conn)
   table.insert(h1, {[":scheme"] = "http"})
   table.insert(h1, {[":authority"] = "localhost:8080"})
   http2.request(conn, callback_req2, h1)
+  print("second request")
 
   h2 = {}
   table.insert(h2, {[":method"] = "GET"})
@@ -47,6 +49,7 @@ function callback_conn(conn)
   table.insert(h2, {[":scheme"] = "http"})
   table.insert(h2, {[":authority"] = "localhost:8080"})
   http2.request(conn, callback_req3, h2)
+  print("third request")
 end
 
 http2.connect("http://localhost:8080/", callback_conn)

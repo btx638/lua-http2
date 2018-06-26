@@ -126,23 +126,25 @@ local function connect(uri, callback)
 end
 
 local function request(conn, callback, headers, body)
-  local s0, s, h, b
+  copas.addthread(function()
+    local s0, s, h, b
 
-  if headers == nil then
-    headers = {}
-    table.insert(headers, {[":method"] = "GET"})
-    table.insert(headers, {[":path"] = conn.uri.path})
-    table.insert(headers, {[":scheme"] = conn.uri.scheme})
-    table.insert(headers, {[":authority"] = conn.uri.authority})
-  end
+    if headers == nil then
+      headers = {}
+      table.insert(headers, {[":method"] = "GET"})
+      table.insert(headers, {[":path"] = conn.uri.path})
+      table.insert(headers, {[":scheme"] = conn.uri.scheme})
+      table.insert(headers, {[":authority"] = conn.uri.authority})
+    end
 
-  s = stream.new(conn)
-  s:set_headers(headers, body == nil)
-  s:encode_window_update("1073741823")
-  h = s:get_headers()
-  b = s:get_body()
+    s = stream.new(conn)
+    s:set_headers(headers, body == nil)
+    s:encode_window_update("1073741823")
+    h = s:get_headers()
+    b = s:get_body()
 
-  copas.addthread(callback, h, b)
+    copas.addthread(callback, h, b)
+  end)
 end
 
 local http2 = {
