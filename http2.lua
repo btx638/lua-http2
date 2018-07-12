@@ -67,20 +67,17 @@ local function dispatch(conn, frame)
     s0:encode_window_update("1073741823")
     conn.recv_first_frame = true
     copas.wakeup(conn.callback_conn)
-  end
-  if s.state == "closed" then
-    conn.stream_finished = true
+    copas.sleep(-1)
+  elseif s.state == "closed" then
+    copas.wakeup(conn.callbacks[s.id])
+    conn.requests = conn.requests - 1
+    if conn.requests == 0 then copas.sleep(-1) end
   end
 end
 
 local function receiver(conn)
   local frame, err, s
   while true do
-    if conn.stream_finished == true then
-      conn.stream_finished = false
-      copas.wakeup(conn.callback)
-      copas.sleep(-1)
-    end
     frame, err = getframe(conn)
     print(frame.ftype, frame.flags, frame.stream_id)
     dispatch(conn, frame)
@@ -98,12 +95,14 @@ local function connect(uri, callback)
       client = nil,
       uri = parsed_uri,
       recv_first_frame = false,
-      stream_finished = false,
-      max_client_streamid = 3,
-      max_server_streamid = 0,
+      stream_finished = nil,
+      max_client_streamid = 1,
+      max_server_streamid = 2,
       hpack_context = nil,
       server_settings = {},
-      streams = {},
+      streams = setmetatable({}, {__mode = "v"}),
+      callbacks = {},
+      requests = 0,
       settings_parameters = settings_parameters,
       default_settings = default_settings,
       window = 65535,
@@ -116,18 +115,28 @@ local function connect(uri, callback)
 
     connection.callback_conn = copas.addthread(function()
       copas.sleep(-1)
-      connection.callback = copas.addthread(callback, connection)
+      print("callback_conn woke up")
+      copas.addthread(callback, connection)
+      print("callback finished")
+      copas.wakeup(connection.receiver)
+      print("waking up receiver")
     end)
 
     connection.receiver = copas.addthread(function()
+      copas.sleep(0)
       receiver(connection)
     end)
   end)
 end
 
 local function request(conn, callback, headers, body)
-  copas.addthread(function()
-    local s0, s, h, b
+  local h, b
+  local s = stream.new(conn)
+  conn.requests = conn.requests + 1
+
+  conn.callbacks[s.id] = copas.addthread(function()
+    copas.sleep(0)
+    print("s.id: " .. s.id)
 
     if headers == nil then
       headers = {}
@@ -137,9 +146,9 @@ local function request(conn, callback, headers, body)
       table.insert(headers, {[":authority"] = conn.uri.authority})
     end
 
-    s = stream.new(conn)
     s:set_headers(headers, body == nil)
     s:encode_window_update("1073741823")
+    print("all set")
     h = s:get_headers()
     b = s:get_body()
 

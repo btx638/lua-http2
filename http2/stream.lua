@@ -23,8 +23,8 @@ local function new(connection, id)
       conn.max_client_streamid = math.max(conn.max_client_streamid, id)
     end
   else
-    stream.id = conn.max_client_streamid
-    conn.max_client_streamid = stream.id + 2
+    stream.id = conn.max_client_streamid + 2
+    conn.max_client_streamid = stream.id
   end
   conn.streams[stream.id] = stream
   return stream
