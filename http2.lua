@@ -91,7 +91,7 @@ local function connect(uri, callback)
       uri = parsed_uri,
       recv_first_frame = false,
       stream_finished = nil,
-      max_client_streamid = 1,
+      max_client_streamid = 3,
       max_server_streamid = 2,
       hpack_context = nil,
       server_settings = {},

@@ -17,14 +17,16 @@ local function new(connection, id)
   local conn = stream.connection
   if id then
     stream.id = id
-    if id % 2 == 0 then
-      conn.max_server_streamid = math.max(conn.max_server_streamid, id)
-    else
-      conn.max_client_streamid = math.max(conn.max_client_streamid, id)
+    if id ~= 0 then
+      if id % 2 == 0 then
+        conn.max_server_streamid = math.max(conn.max_server_streamid, id)
+      else
+        conn.max_client_streamid = math.max(conn.max_client_streamid, id)
+      end
     end
   else
-    stream.id = conn.max_client_streamid + 2
-    conn.max_client_streamid = stream.id
+    stream.id = conn.max_client_streamid
+    conn.max_client_streamid = stream.id + 2
   end
   conn.streams[stream.id] = stream
   return stream
