@@ -55,32 +55,27 @@ local function getframe(conn)
   }
 end
 
-local function dispatch(conn, frame)
-  local s, s0
-  s = conn.streams[frame.stream_id]
-  if s == nil then s = stream.new(conn, frame.stream_id) end
-  s:parse_frame(frame.ftype, frame.flags, frame.payload)
-  if conn.recv_first_frame == false then
-    s:encode_settings(false)
-    s0 = conn.streams[0]
-    if s0 == nil then s0 = stream.new(conn, 0) end
-    s0:encode_window_update("1073741823")
-    conn.recv_first_frame = true
-    copas.wakeup(conn.callback_conn)
-    copas.sleep(-1)
-  elseif s.state == "closed" then
-    copas.wakeup(conn.callbacks[s.id])
-    conn.requests = conn.requests - 1
-    if conn.requests == 0 then copas.sleep(-1) end
-  end
-end
-
 local function receiver(conn)
-  local frame, err, s
+  local frame, err, s, s0
   while true do
     frame, err = getframe(conn)
     print(frame.ftype, frame.flags, frame.stream_id)
-    dispatch(conn, frame)
+    s = conn.streams[frame.stream_id]
+    if s == nil then s = stream.new(conn, frame.stream_id) end
+    s:parse_frame(frame.ftype, frame.flags, frame.payload)
+    if conn.recv_first_frame == false then
+      s:encode_settings(false)
+      s0 = conn.streams[0]
+      if s0 == nil then s0 = stream.new(conn, 0) end
+      s0:encode_window_update("1073741823")
+      conn.recv_first_frame = true
+      copas.wakeup(conn.callback_conn)
+      copas.sleep(-1)
+    elseif s.state == "closed" then
+      copas.wakeup(conn.callbacks[s.id])
+      conn.requests = conn.requests - 1
+      if conn.requests == 0 then copas.sleep(-1) end
+    end
   end
 end
 
