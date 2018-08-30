@@ -118,7 +118,6 @@ local function connect(uri, callback)
     end)
 
     connection.receiver = copas.addthread(function()
-      copas.sleep(0)
       receiver(connection)
     end)
   end)
