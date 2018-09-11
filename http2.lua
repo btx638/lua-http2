@@ -143,7 +143,7 @@ local function request(conn, callback, headers, body)
     if headers == nil then
       headers = {}
       table.insert(headers, {[":method"] = "GET"})
-      table.insert(headers, {[":path"] = conn.uri.path})
+      table.insert(headers, {[":path"] = conn.uri.path or '/'})
       table.insert(headers, {[":scheme"] = conn.uri.scheme})
       table.insert(headers, {[":authority"] = conn.uri.authority})
     end
