@@ -24,6 +24,14 @@ local default_settings = {
   MAX_HEADER_LIST_SIZE   = 25600
 }
 
+local tls = {
+  mode = "client",
+  protocol = "any",
+  options = {"all", "no_sslv2", "no_sslv3"},
+  verify = "none",
+  alpn = "h2"
+}
+
 -- Settings indexed both as names and as hexadecimal identifiers
 for id = 0x1, 0x6 do
   settings_parameters[settings_parameters[id]] = id
@@ -104,8 +112,8 @@ local function connect(uri, callback)
       last_stream_id = 0,
       header_block_fragment = nil
     }, mt)
-    connection.client = copas.wrap(socket.tcp())
-    connection.client:connect(parsed_uri.host, parsed_uri.port)
+    connection.client = copas.wrap(socket.tcp(), tls)
+    connection.client:connect(parsed_uri.host, parsed_uri.port or 443)
     connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 
     connection.callback_conn = copas.addthread(function()
