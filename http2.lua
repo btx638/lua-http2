@@ -112,7 +112,7 @@ local function connect(uri, callback)
       last_stream_id = 0,
       header_block_fragment = nil
     }, mt)
-    connection.client = copas.wrap(socket.tcp(), parsed_uri.scheme == "https" and tls or nil)
+    connection.client = copas.wrap(socket.tcp(), parsed_uri.scheme == "https" and tls)
     connection.client:connect(parsed_uri.host, parsed_uri.port or 443)
     connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 
