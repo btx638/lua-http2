@@ -69,7 +69,10 @@ local function receiver(conn)
     frame, err = getframe(conn)
     print(frame.ftype, frame.flags, frame.stream_id)
     s = conn.streams[frame.stream_id]
-    if s == nil then s = stream.new(conn, frame.stream_id) end
+    if s == nil then 
+      conn.last_stream_id_server = frame.stream_id
+      s = stream.new(conn, frame.stream_id)
+    end
     s:parse_frame(frame.ftype, frame.flags, frame.payload)
     if conn.recv_first_frame == false then
       s:encode_settings(false)
