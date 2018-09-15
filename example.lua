@@ -37,7 +37,7 @@ function callback_req(headers, body)
   fd:flush()
 end
 
-function callback_conn(conn)
+function callback_connect(conn)
   http2.request(conn, callback_req)
   print("request1 finished")
 
@@ -59,6 +59,7 @@ function callback_conn(conn)
   print("request3 finished")
 end
 
-http2.connect("http://localhost:8080", callback_conn)
+http2.connect("http://localhost:8080/", callback_connect)
+--http2.connect("https://www.google.com/", callback_connect)
 
 copas.loop()
