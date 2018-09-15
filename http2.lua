@@ -119,7 +119,7 @@ local function connect(surl, callback)
       settings_parameters = settings_parameters,
       default_settings = default_settings,
       window = 65535,
-      last_stream_id = 0,
+      last_stream_id_server = 0,
       header_block_fragment = nil
     }, mt)
 
