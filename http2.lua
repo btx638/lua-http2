@@ -87,8 +87,18 @@ local function receiver(conn)
   end
 end
 
-local function connect(uri, callback)
-  local parsed_uri = url.parse(uri)
+local function init(conn)
+  conn.client = copas.wrap(socket.tcp(), conn.surl.scheme == "https" and tls)
+  conn.client:connect(conn.surl.host, conn.surl.port or 443)
+  conn.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+  -- we are permitted to do that (3.5)
+  local s = stream.new(conn, 0)
+  s:encode_settings(false)
+  s:encode_window_update("1073741823")
+end
+
+local function connect(surl, callback)
+  local parsed_url = url.parse(surl)
   local connection
 
   copas.addthread(function()
@@ -112,9 +122,8 @@ local function connect(uri, callback)
       last_stream_id = 0,
       header_block_fragment = nil
     }, mt)
-    connection.client = copas.wrap(socket.tcp(), parsed_uri.scheme == "https" and tls)
-    connection.client:connect(parsed_uri.host, parsed_uri.port or 443)
-    connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+
+    init(connection)
 
     connection.callback_conn = copas.addthread(function()
       copas.sleep(-1)
