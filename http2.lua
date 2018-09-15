@@ -106,8 +106,8 @@ local function connect(surl, callback)
 
     connection = setmetatable({
       client = nil,
-      uri = parsed_uri,
-      recv_first_frame = false,
+      surl = parsed_url,
+      recv_server_preface = false,
       stream_finished = nil,
       max_client_streamid = 3,
       max_server_streamid = 2,
@@ -152,9 +152,9 @@ local function request(conn, callback, headers, body)
     if headers == nil then
       headers = {}
       table.insert(headers, {[":method"] = "GET"})
-      table.insert(headers, {[":path"] = conn.uri.path or '/'})
-      table.insert(headers, {[":scheme"] = conn.uri.scheme})
-      table.insert(headers, {[":authority"] = conn.uri.authority})
+      table.insert(headers, {[":path"] = conn.surl.path or '/'})
+      table.insert(headers, {[":scheme"] = conn.surl.scheme})
+      table.insert(headers, {[":authority"] = conn.surl.authority})
     end
 
     s:set_headers(headers, body == nil)
