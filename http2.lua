@@ -85,6 +85,7 @@ local function receiver(conn)
       if conn.requests == 0 then 
         s0 = conn.streams[0]
         s0:encode_goaway(conn.last_stream_id_server, 0x0)
+        copas.sleep(-1)
       end
     end
   end
