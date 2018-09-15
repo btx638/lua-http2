@@ -67,7 +67,7 @@ local function receiver(conn)
   local frame, err, s, s0
   while true do
     frame, err = getframe(conn)
-    print(frame.ftype, frame.flags, frame.stream_id)
+    --print(frame.ftype, frame.flags, frame.stream_id)
     s = conn.streams[frame.stream_id]
     if s == nil then 
       conn.last_stream_id_server = frame.stream_id
@@ -80,9 +80,12 @@ local function receiver(conn)
       copas.wakeup(conn.callback_connect)
       copas.sleep(-1)
     elseif s.state == "closed" then
-      copas.wakeup(conn.callbacks[s.id])
+      copas.wakeup(conn.streams[s.id].request)
       conn.requests = conn.requests - 1
-      if conn.requests == 0 then copas.sleep(-1) end
+      if conn.requests == 0 then 
+        s0 = conn.streams[0]
+        s0:encode_goaway(conn.last_stream_id_server, 0x0)
+      end
     end
   end
 end
@@ -142,9 +145,8 @@ local function request(conn, callback, headers, body)
   local s = stream.new(conn)
   conn.requests = conn.requests + 1
 
-  conn.callbacks[s.id] = copas.addthread(function()
+  copas.addthread(function()
     copas.sleep(0)
-    print("s.id: " .. s.id)
 
     if headers == nil then
       headers = {}
@@ -156,11 +158,13 @@ local function request(conn, callback, headers, body)
 
     s:set_headers(headers, body == nil)
     s:encode_window_update("1073741823")
-    print("all set")
-    h = s:get_headers()
-    b = s:get_body()
 
-    copas.addthread(callback, h, b)
+    conn.streams[s.id].request = copas.addthread(function()
+      copas.sleep(-1)
+      h = table.remove(s.headers, 1)
+      b = table.concat(s.data)
+      copas.addthread(callback, h, b)
+    end)
   end)
 end
 

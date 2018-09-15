@@ -207,15 +207,6 @@ function mt.__index:encode_continuation(payload, end_stream)
   conn:send_frame(0x9, flags, self.id, payload)
 end
 
-function mt.__index:get_headers()
-  copas.sleep(-1)
-  return table.remove(self.headers, 1)
-end
-
-function mt.__index:get_body()
-  return table.concat(self.data)
-end
-
 function mt.__index:set_headers(headers, end_stream)
   local conn = self.connection
   local header_block = hpack.encode(conn.hpack_context, headers)
