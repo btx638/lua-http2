@@ -175,7 +175,7 @@ function mt.__index:encode_settings(ack, settings)
   if ack then
     flags = 0x1
     payload = ""
-    conn:send_frame(0x4, 0x1, 0, payload)
+    conn:send_frame(0x4, flags, 0, payload)
   else
     flags = 0x0
     for k, v in ipairs(conn.default_settings) do
@@ -184,8 +184,7 @@ function mt.__index:encode_settings(ack, settings)
       i = i + 1
     end
     payload = string.pack(">" .. ("I2I4"):rep(i), table.unpack(t, 1, i * 2))
-    conn:send_frame(0x4, 0x0, self.id, payload)
-    self:encode_settings(true)
+    conn:send_frame(0x4, flags, self.id, payload)
   end
 end
 
