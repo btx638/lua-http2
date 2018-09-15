@@ -74,13 +74,10 @@ local function receiver(conn)
       s = stream.new(conn, frame.stream_id)
     end
     s:parse_frame(frame.ftype, frame.flags, frame.payload)
-    if conn.recv_first_frame == false then
-      s:encode_settings(false)
-      s0 = conn.streams[0]
-      if s0 == nil then s0 = stream.new(conn, 0) end
-      s0:encode_window_update("1073741823")
-      conn.recv_first_frame = true
-      copas.wakeup(conn.callback_conn)
+    -- error: if it's not a server preface
+    if conn.recv_server_preface == false then
+      conn.recv_server_preface = true
+      copas.wakeup(conn.callback_connect)
       copas.sleep(-1)
     elseif s.state == "closed" then
       copas.wakeup(conn.callbacks[s.id])

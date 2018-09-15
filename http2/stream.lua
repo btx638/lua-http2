@@ -91,6 +91,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
     local server_table_size = self.connection.server_settings.HEADER_TABLE_SIZE
     local default_table_size = self.connection.default_settings.HEADER_TABLE_SIZE
     self.connection.hpack_context = hpack.new(server_table_size or default_table_size)
+    self:encode_settings(true)
   elseif ftype == 0x5 then
     -- PUSH_PROMISE
   elseif ftype == 0x6 then
