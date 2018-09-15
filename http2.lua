@@ -125,13 +125,11 @@ local function connect(surl, callback)
 
     init(connection)
 
-    connection.callback_conn = copas.addthread(function()
+    connection.callback_connect = copas.addthread(function()
+      -- will wake up as soon as we receive the server preface
       copas.sleep(-1)
-      print("callback_conn woke up")
       copas.addthread(callback, connection)
-      print("callback_conn finished")
       copas.wakeup(connection.receiver)
-      print("waking up receiver")
     end)
 
     connection.receiver = copas.addthread(function()
