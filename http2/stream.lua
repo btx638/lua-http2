@@ -98,8 +98,8 @@ function mt.__index:parse_frame(ftype, flags, payload)
     -- PING
   elseif ftype == 0x7 then
     -- GOAWAY
-    local last_stream_id = string.unpack(">I4I4", payload)
-    self.connection.last_stream_id = last_stream_id
+    local last_stream_id_client = string.unpack(">I4I4", payload)
+    self.connection.last_stream_id_client = last_stream_id_client
   elseif ftype == 0x8 then
     -- WINDOW_UPDATE
     local bytes = string.unpack(">I4", payload)
