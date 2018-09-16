@@ -1,8 +1,8 @@
-local stream = require "http2.stream"
+local http2_stream = require "http2.stream"
 local hpack = require "http2.hpack"
 local copas = require "copas"
 local socket = require "socket"
-local url = require "socket.url"
+local socket_url = require "socket.url"
 
 copas.autoclose = false
 
@@ -64,26 +64,26 @@ local function getframe(conn)
 end
 
 local function receiver(conn)
-  local frame, err, s, s0
+  local frame, err, stream, s0
   while true do
     frame, err = getframe(conn)
     --print(frame.ftype, frame.flags, frame.stream_id)
-    s = conn.streams[frame.stream_id]
-    if s == nil then 
+    stream = conn.streams[frame.stream_id]
+    if stream == nil then 
       conn.last_stream_id_server = frame.stream_id
-      s = stream.new(conn, frame.stream_id)
+      stream = http2_stream.new(conn, frame.stream_id)
     end
-    s:parse_frame(frame.ftype, frame.flags, frame.payload)
+    stream:parse_frame(frame.ftype, frame.flags, frame.payload)
     -- error: if it's not a server preface
     if conn.recv_server_preface == false then
       conn.recv_server_preface = true
       copas.wakeup(conn.callback_connect)
       copas.sleep(-1)
-    elseif s.state == "half-closed (remote)" or s.state == "closed" then
-      copas.wakeup(conn.streams[s.id].request)
+    elseif stream.state == "half-closed (remote)" or stream.state == "closed" then
+      copas.wakeup(conn.streams[stream.id].request)
       copas.sleep(-1)
       conn.requests = conn.requests - 1
-      s:encode_rst_stream(0x0)
+      stream:encode_rst_stream(0x0)
       if conn.requests == 0 then 
         s0 = conn.streams[0]
         s0:encode_goaway(conn.last_stream_id_server, 0x0)
@@ -94,17 +94,17 @@ local function receiver(conn)
 end
 
 local function init(conn)
-  conn.client = copas.wrap(socket.tcp(), conn.surl.scheme == "https" and tls)
-  conn.client:connect(conn.surl.host, conn.surl.port or 443)
+  conn.client = copas.wrap(socket.tcp(), conn.url.scheme == "https" and tls)
+  conn.client:connect(conn.url.host, conn.url.port or 443)
   conn.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
   -- we are permitted to do that (3.5)
-  local s = stream.new(conn, 0)
-  s:encode_settings(false)
-  s:encode_window_update("1073741823")
+  local stream = http2_stream.new(conn, 0)
+  stream:encode_settings(false)
+  stream:encode_window_update("1073741823")
 end
 
-local function connect(surl, callback)
-  local parsed_url = url.parse(surl)
+local function connect(url, callback)
+  local parsed_url = socket_url.parse(url)
   local connection
 
   copas.addthread(function()
@@ -112,7 +112,7 @@ local function connect(surl, callback)
 
     connection = setmetatable({
       client = nil,
-      surl = parsed_url,
+      url = parsed_url,
       recv_server_preface = false,
       stream_finished = nil,
       max_client_streamid = 3,
@@ -145,7 +145,7 @@ end
 
 local function request(conn, callback, headers, body)
   local h, b
-  local s = stream.new(conn)
+  local stream = http2_stream.new(conn)
   conn.requests = conn.requests + 1
 
   copas.addthread(function()
@@ -154,18 +154,18 @@ local function request(conn, callback, headers, body)
     if headers == nil then
       headers = {}
       table.insert(headers, {[":method"] = "GET"})
-      table.insert(headers, {[":path"] = conn.surl.path or '/'})
-      table.insert(headers, {[":scheme"] = conn.surl.scheme})
-      table.insert(headers, {[":authority"] = conn.surl.authority})
+      table.insert(headers, {[":path"] = conn.url.path or '/'})
+      table.insert(headers, {[":scheme"] = conn.url.scheme})
+      table.insert(headers, {[":authority"] = conn.url.authority})
     end
 
-    s:set_headers(headers, body == nil)
-    s:encode_window_update("1073741823")
+    stream:set_headers(headers, body == nil)
+    stream:encode_window_update("1073741823")
 
-    conn.streams[s.id].request = copas.addthread(function()
+    conn.streams[stream.id].request = copas.addthread(function()
       copas.sleep(-1)
-      h = table.remove(s.headers, 1)
-      b = table.concat(s.data)
+      h = table.remove(stream.headers, 1)
+      b = table.concat(stream.data)
       copas.addthread(callback, h, b)
       copas.wakeup(conn.receiver)
     end)
