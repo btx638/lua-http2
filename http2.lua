@@ -79,7 +79,7 @@ local function receiver(conn)
       conn.recv_server_preface = true
       copas.wakeup(conn.callback_connect)
       copas.sleep(-1)
-    elseif s.state == "closed" then
+    elseif s.state == "half-closed (remote)" or s.state == "closed" then
       copas.wakeup(conn.streams[s.id].request)
       conn.requests = conn.requests - 1
       if conn.requests == 0 then 

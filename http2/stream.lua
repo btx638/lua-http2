@@ -42,7 +42,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
     end
     table.insert(self.data, payload)
     if end_stream then
-      self.state = "closed"
+      self.state = "half-closed (remote)"
     end
   elseif ftype == 0x1 then
     -- HEADERS
