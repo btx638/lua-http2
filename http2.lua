@@ -81,6 +81,7 @@ local function receiver(conn)
       copas.sleep(-1)
     elseif s.state == "half-closed (remote)" or s.state == "closed" then
       copas.wakeup(conn.streams[s.id].request)
+      copas.sleep(-1)
       conn.requests = conn.requests - 1
       if conn.requests == 0 then 
         s0 = conn.streams[0]
@@ -165,6 +166,7 @@ local function request(conn, callback, headers, body)
       h = table.remove(s.headers, 1)
       b = table.concat(s.data)
       copas.addthread(callback, h, b)
+      copas.wakeup(conn.receiver)
     end)
   end)
 end
