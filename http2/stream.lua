@@ -1,5 +1,4 @@
 local hpack = require "http2.hpack"
-local copas = require "copas"
 
 local mt = {__index = {}}
 
