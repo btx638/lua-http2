@@ -67,7 +67,7 @@ local function receiver(conn)
   local frame, err, stream, s0
   while true do
     frame, err = getframe(conn)
-    --print(frame.ftype, frame.flags, frame.stream_id)
+    print(frame.ftype, frame.flags, frame.stream_id)
     stream = conn.streams[frame.stream_id]
     if stream == nil then 
       conn.last_stream_id_server = frame.stream_id
@@ -75,19 +75,21 @@ local function receiver(conn)
     end
     stream:parse_frame(frame.ftype, frame.flags, frame.payload)
     -- error: if it's not a server preface
+    -- todo: necessary?
     if conn.recv_server_preface == false then
       conn.recv_server_preface = true
       copas.wakeup(conn.callback_connect)
       copas.sleep(-1)
+    elseif stream.state == "open" then
+      copas.wakeup(conn.responses[stream.id])
     elseif stream.state == "half-closed (remote)" or stream.state == "closed" then
-      copas.wakeup(conn.streams[stream.id].request)
-      copas.sleep(-1)
+      copas.wakeup(conn.data[stream.id])
       conn.requests = conn.requests - 1
       stream:encode_rst_stream(0x0)
       if conn.requests == 0 then 
         s0 = conn.streams[0]
         s0:encode_goaway(conn.last_stream_id_server, 0x0)
-        copas.sleep(-1)
+        --copas.sleep(-1)
       end
     end
   end
@@ -103,14 +105,17 @@ local function init(conn)
   stream:encode_window_update("1073741823")
 end
 
-local function connect(url, callback)
-  local parsed_url = socket_url.parse(url)
-  local connection
+local function on_connect(url, callback)
+  local parsed_url = type(url) == "string" and socket_url.parse(url)
+  -- todo: url as a table of options
+  -- error: if url is neither a string nor a table
 
   copas.addthread(function()
-    copas.sleep(0)
+    copas.sleep()
 
-    connection = setmetatable({
+    local connection = setmetatable({
+      responses = {},
+      data = {},
       client = nil,
       url = parsed_url,
       recv_server_preface = false,
@@ -131,9 +136,8 @@ local function connect(url, callback)
     init(connection)
 
     connection.callback_connect = copas.addthread(function()
-      -- will wake up as soon as we receive the server preface
       copas.sleep(-1)
-      copas.addthread(callback, connection)
+      copas.addthread(callback)
       copas.wakeup(connection.receiver)
     end)
 
@@ -141,39 +145,48 @@ local function connect(url, callback)
       receiver(connection)
     end)
   end)
+
+  copas.loop()
 end
 
-local function request(conn, callback, headers, body)
-  local h, b
-  local stream = http2_stream.new(conn)
-  conn.requests = conn.requests + 1
+local rmt = {__index = {}}
 
-  copas.addthread(function()
-    copas.sleep(0)
-
-    if headers == nil then
-      headers = {}
-      table.insert(headers, {[":method"] = "GET"})
-      table.insert(headers, {[":path"] = conn.url.path or '/'})
-      table.insert(headers, {[":scheme"] = conn.url.scheme})
-      table.insert(headers, {[":authority"] = conn.url.authority})
-    end
-
-    stream:set_headers(headers, body == nil)
-    stream:encode_window_update("1073741823")
-
-    conn.streams[stream.id].request = copas.addthread(function()
-      copas.sleep(-1)
-      h = table.remove(stream.headers, 1)
-      b = table.concat(stream.data)
-      copas.addthread(callback, h, b)
-      copas.wakeup(conn.receiver)
-    end)
+function rmt.__index:on_response(callback)
+  self.conn.responses[self.stream.id] = copas.addthread(function()
+    copas.sleep(-1)
+    copas.addthread(callback, table.remove(self.stream.headers, 1))
   end)
 end
 
+function rmt.__index:on_data(callback)
+  self.conn.data[self.stream.id] = copas.addthread(function()
+    copas.sleep(-1)
+    copas.addthread(callback, table.concat(self.stream.data))
+  end)
+end
+
+local function request(headers, body)
+  local stream = http2_stream.new(conn)
+  conn.requests = conn.requests + 1
+
+  if headers == nil then
+    headers = {}
+    table.insert(headers, {[":method"] = "GET"})
+    table.insert(headers, {[":path"] = conn.url.path or '/'})
+    table.insert(headers, {[":scheme"] = conn.url.scheme})
+    table.insert(headers, {[":authority"] = conn.url.authority})
+  end
+
+  stream:set_headers(headers, body == nil)
+  stream:encode_window_update("1073741823")
+
+  return setmetatable({
+    on_response = on_response,
+  }, rmt)
+end
+
 local http2 = {
-  connect = connect,
+  on_connect = on_connect,
   request = request
 }
 

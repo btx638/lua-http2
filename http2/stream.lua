@@ -64,6 +64,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
     if end_headers then
       local header_list = hpack.decode(self.connection.hpack_context, payload)
       table.insert(self.headers, header_list)
+      self.state = "open"
     else
       self.connection.header_block_fragment = {payload}
     end
