@@ -1,4 +1,4 @@
-local hpack = require "http2.hpack"
+local http2_hpack = require "http2.hpack"
 
 local mt = {__index = {}}
 
@@ -25,7 +25,6 @@ local function new(connection, id)
     end
   else
     stream.id = conn.max_client_streamid
-    conn.max_client_streamid = stream.id + 2
   end
   conn.streams[stream.id] = stream
   return stream
@@ -62,7 +61,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
       payload = payload:sub(1, - pad_length - 1)
     end
     if end_headers then
-      local header_list = hpack.decode(self.connection.hpack_context, payload)
+      local header_list = http2_hpack.decode(self.connection.hpack_context, payload)
       table.insert(self.headers, header_list)
       self.state = "open"
     else
@@ -90,7 +89,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
     self.connection.server_settings = settings
     local server_table_size = self.connection.server_settings.HEADER_TABLE_SIZE
     local default_table_size = self.connection.default_settings.HEADER_TABLE_SIZE
-    self.connection.hpack_context = hpack.new(server_table_size or default_table_size)
+    self.connection.hpack_context = http2_hpack.new(server_table_size or default_table_size)
     self:encode_settings(true)
   elseif ftype == 0x5 then
     -- PUSH_PROMISE
@@ -115,7 +114,7 @@ function mt.__index:parse_frame(ftype, flags, payload)
     table.insert(self.connection.header_block_fragment, payload)
     if end_headers then
       payload = table.concat(self.connection.header_block_fragment)
-      local header_list = hpack.decode(self.connection.hpack_context, payload)
+      local header_list = http2_hpack.decode(self.connection.hpack_context, payload)
       table.insert(self.headers, header_list)
     end
   end
@@ -209,7 +208,7 @@ end
 
 function mt.__index:set_headers(headers, end_stream)
   local conn = self.connection
-  local header_block = hpack.encode(conn.hpack_context, headers)
+  local header_block = http2_hpack.encode(conn.hpack_context, headers)
   local max_fsize = conn.server_settings.MAX_FRAME_SIZE
   local payload
   if #header_block <= max_fsize then

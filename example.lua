@@ -1,23 +1,30 @@
 local http2 = require "http2"
 
--- todo: what if this is after on_connect?
---http2.on_error(function(err)
---  print(err)
---end)
+local client = http2.connect("http://localhost:8080/")
 
-http2.on_connect("http://localhost:8080/", function()
-  local req = http2.request()
+-- todo: what if this is after the last callback?
+client:on_error(function(err)
+  print(err)
+end)
 
-  req:on_response(function(response)
+client:on_connect(function()
+  local req = client:request()
+
+  req:on_response(function(res)
+    -- todo: what if this is after the last callback?
+    res:on_error(function(err)
+      print(err)
+    end)
+
     local fd = io.open("http2_out1.html", "w")
 
-    for k, v in ipairs(response.headers) do
+    for k, v in ipairs(res.headers) do
       for name, value in pairs(v) do
         print(name, value)
       end
     end
       
-    response:on_data(function(body)
+    res:on_data(function(body)
       fd:flush()
       fd:write(body)
       fd:flush()
