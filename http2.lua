@@ -11,9 +11,6 @@ local reqmt = {__index = {}}
 local resmt = {__index = {}}
 local connection, client
 
-function resmt.__index:on_error(callback)
-end
-
 function resmt.__index:on_data(callback)
   local stream_id = connection.max_client_streamid
   connection.data[stream_id] = copas.addthread(function()
@@ -50,6 +47,12 @@ local function getframe(conn)
   }
 end
 
+local function check_server_preface(frame)
+  if frame.ftype ~= 0x4 then
+    error("Protocol error detected")
+  end
+end
+
 local function receiver(conn)
   local frame, err, stream, s0
   while true do
@@ -61,14 +64,21 @@ local function receiver(conn)
       stream = http2_stream.new(conn, frame.stream_id)
     end
     stream:parse_frame(frame.ftype, frame.flags, frame.payload)
-    -- error: if it's not a server preface
     -- todo: necessary?
     if conn.recv_server_preface == false then
-      conn.recv_server_preface = true
-      copas.wakeup(conn.callback_connect)
-      print("sleeping")
-      copas.sleep(-1)
-      print("waking up")
+      local ok, err = pcall(check_server_preface, frame)
+      print(ok, err)
+      if not ok then
+        stream:encode_goaway(connection.last_stream_id_server, 0x1)
+        copas.wakeup(connection.cerr)
+        connection.errcode = 0x1
+        connection.client:close()
+        print("connection.cerr awaken by receiver")
+      else
+        conn.recv_server_preface = true
+        copas.wakeup(conn.callback_connect)
+        copas.sleep(-1)
+      end
     elseif stream.state == "open" then
       copas.wakeup(conn.responses[stream.id])
     elseif stream.state == "half-closed (remote)" or stream.state == "closed" then
@@ -78,21 +88,11 @@ local function receiver(conn)
       if conn.requests == 0 then 
         s0 = conn.streams[0]
         s0:encode_goaway(conn.last_stream_id_server, 0x0)
+        conn.client:close()
         copas.sleep(-1)
       end
     end
   end
-end
-
-local function init(conn)
-  local https = conn.url.scheme == "https" and conn.tls
-  conn.client = copas.wrap(socket.tcp(), https)
-  conn.client:connect(conn.url.host, conn.url.port or 443)
-  conn.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-  -- we are permitted to do that (3.5)
-  local stream = http2_stream.new(conn, 0)
-  stream:encode_settings(false)
-  stream:encode_window_update("1073741823")
 end
 
 function cmt.__index:request(headers, body)
@@ -106,6 +106,7 @@ function cmt.__index:request(headers, body)
     table.insert(headers, {[":path"] = connection.url.path or '/'})
     table.insert(headers, {[":scheme"] = connection.url.scheme})
     table.insert(headers, {[":authority"] = connection.url.authority})
+    table.insert(headers, {["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36"})
   end
   stream:set_headers(headers, body == nil)
   stream:encode_window_update("1073741823")
@@ -113,18 +114,21 @@ function cmt.__index:request(headers, body)
 end
 
 function cmt.__index:on_error(callback)
-  connection.cerror = copas.addthread(function()
+  connection.cerr = copas.addthread(function()
     copas.sleep(-1)
+    copas.addthread(callback, "Protocol error detected")
+    error(connection.errcode, 0)
+    print("on_error finished")
   end)
 end
 
 function cmt.__index:on_connect(callback)
   copas.addthread(function()
-    copas.sleep()
+    copas.sleep(2)
 
     connection.callback_connect = copas.addthread(function()
       copas.sleep(-1)
-      copas.addthread(callback, client)
+      copas.addthread(callback)
       copas.wakeup(connection.receiver)
     end)
 
@@ -143,7 +147,15 @@ local function connect(url)
 
   copas.addthread(function()
     copas.sleep()
-    init(connection)
+
+    local https = connection.url.scheme == "https" and connection.tls
+    connection.client = copas.wrap(socket.tcp(), https)
+    connection.client:connect(connection.url.host, connection.url.port or 443)
+    connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+    -- we are permitted to do that (3.5)
+    local stream = http2_stream.new(connection, 0)
+    stream:encode_settings(false)
+    stream:encode_window_update("1073741823")
   end)
 
   client = setmetatable({}, cmt)

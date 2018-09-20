@@ -1,5 +1,6 @@
 local http2 = require "http2"
 
+--local client = http2.connect("https://www.facebook.com/")
 local client = http2.connect("http://localhost:8080/")
 
 -- todo: what if this is after the last callback?
@@ -9,13 +10,8 @@ end)
 
 client:on_connect(function()
   local req = client:request()
-
+  
   req:on_response(function(res)
-    -- todo: what if this is after the last callback?
-    res:on_error(function(err)
-      print(err)
-    end)
-
     local fd = io.open("http2_out1.html", "w")
 
     for k, v in ipairs(res.headers) do
