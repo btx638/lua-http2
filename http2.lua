@@ -6,29 +6,14 @@ local socket_url = require "socket.url"
 
 copas.autoclose = false
 
-local cmt = {__index = {}}
-local reqmt = {__index = {}}
-local resmt = {__index = {}}
-local connection, client
+local connection, client, url
 
-function resmt.__index:on_data(callback)
-  local stream_id = connection.max_client_streamid
-  connection.data[stream_id] = copas.addthread(function()
-    copas.sleep(-1)
-    local data = table.concat(connection.streams[stream_id].data)
-    copas.addthread(callback, data)
-  end)
-end
-
-function reqmt.__index:on_response(callback)
-  local stream_id = connection.max_client_streamid
-  connection.responses[stream_id] = copas.addthread(function()
-    copas.sleep(-1)
-    local headers = table.remove(connection.streams[stream_id].headers, 1)
-    local response = setmetatable({headers = headers}, resmt)
-    copas.addthread(callback, response)
-  end)
-end
+local default_url = {
+  method = "GET",
+  scheme = "https",
+  path = '/',
+  port = 443
+}
 
 local function getframe(conn)
   local header, payload, err
@@ -47,17 +32,12 @@ local function getframe(conn)
   }
 end
 
-local function check_server_preface(frame)
-  if frame.ftype ~= 0x4 then
-    error("Protocol error detected")
-  end
-end
-
+-- todo: remove 'conn'
 local function receiver(conn)
   local frame, err, stream, s0
   while true do
     frame, err = getframe(conn)
-    print(frame.ftype, frame.flags, frame.stream_id)
+    --print(frame.ftype, frame.flags, frame.stream_id)
     stream = conn.streams[frame.stream_id]
     if stream == nil then 
       conn.last_stream_id_server = frame.stream_id
@@ -66,70 +46,76 @@ local function receiver(conn)
     stream:parse_frame(frame.ftype, frame.flags, frame.payload)
     -- todo: necessary?
     if conn.recv_server_preface == false then
-      local ok, err = pcall(check_server_preface, frame)
-      print(ok, err)
-      if not ok then
-        stream:encode_goaway(connection.last_stream_id_server, 0x1)
-        copas.wakeup(connection.cerr)
-        connection.errcode = 0x1
-        connection.client:close()
-        print("connection.cerr awaken by receiver")
-      else
-        conn.recv_server_preface = true
-        copas.wakeup(conn.callback_connect)
-        copas.sleep(-1)
-      end
+      conn.recv_server_preface = true
+      copas.wakeup(conn.callback_connect)
+      copas.sleep(-1)
     elseif stream.state == "open" then
-      copas.wakeup(conn.responses[stream.id])
+      copas.wakeup(conn.on_response[stream.id])
     elseif stream.state == "half-closed (remote)" or stream.state == "closed" then
-      copas.wakeup(conn.data[stream.id])
-      conn.requests = conn.requests - 1
+      copas.wakeup(conn.on_data[stream.id])
       stream:encode_rst_stream(0x0)
-      if conn.requests == 0 then 
-        s0 = conn.streams[0]
-        s0:encode_goaway(conn.last_stream_id_server, 0x0)
-        conn.client:close()
-        copas.sleep(-1)
-      end
     end
   end
 end
 
-function cmt.__index:request(headers, body)
-  connection.max_client_streamid = connection.max_client_streamid + 2
-  connection.requests = connection.requests + 1
+local function on_error(callback)
+end
+
+local function request(headers, body)
   local stream = http2_stream.new(connection)
-  
-  if headers == nil then
-    headers = {}
-    table.insert(headers, {[":method"] = "GET"})
-    table.insert(headers, {[":path"] = connection.url.path or '/'})
-    table.insert(headers, {[":scheme"] = connection.url.scheme})
-    table.insert(headers, {[":authority"] = connection.url.authority})
-    table.insert(headers, {["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36"})
+
+  local on_data = function(callback)
+    connection.on_data[stream.id] = copas.addthread(function()
+      copas.sleep(-1)
+      local data = table.concat(stream.data)
+      callback(data)
+    end)
   end
-  stream:set_headers(headers, body == nil)
-  stream:encode_window_update("1073741823")
-  return setmetatable({}, reqmt)
-end
 
-function cmt.__index:on_error(callback)
-  connection.cerr = copas.addthread(function()
+  local on_response = function(callback)
+    connection.on_response[stream.id] = copas.addthread(function()
+      copas.sleep(-1)
+      local headers = table.remove(stream.headers, 1)
+      local res = {headers = headers, on_data = on_data}
+      callback(res)
+    end)
+  end
+
+  connection.request[#connection.request + 1] = copas.addthread(function()
     copas.sleep(-1)
-    copas.addthread(callback, "Protocol error detected")
-    error(connection.errcode, 0)
-    print("on_error finished")
+
+    if headers == nil then
+      headers = {}
+      table.insert(headers, {[":method"] = url.method})
+      table.insert(headers, {[":path"] = url.path})
+      table.insert(headers, {[":scheme"] = url.scheme})
+      table.insert(headers, {[":authority"] = url.authority})
+      table.insert(headers, {["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36"})
+    end
+    stream:set_headers(headers, body == nil)
+    stream:encode_window_update("1073741823")
+    local req = table.remove(connection.request, 1)
+    if req then
+      copas.wakeup(req)
+    else
+      copas.wakeup(connection.receiver)
+    end
   end)
+
+  return {
+    on_response = on_response
+  }
 end
 
-function cmt.__index:on_connect(callback)
+local function on_connect(callback)
   copas.addthread(function()
-    copas.sleep(2)
+    copas.sleep()
 
     connection.callback_connect = copas.addthread(function()
       copas.sleep(-1)
-      copas.addthread(callback)
-      copas.wakeup(connection.receiver)
+      callback({request = request, on_error = on_error})
+      local req = table.remove(connection.request, 1)
+      copas.wakeup(req)
     end)
 
     connection.receiver = copas.addthread(function()
@@ -140,17 +126,16 @@ function cmt.__index:on_connect(callback)
   copas.loop()
 end
 
-local function connect(url)
-  -- error: if url is neither a string nor a table
-  local parsed_url = type(url) == "string" and socket_url.parse(url)
-  connection = http2_connection.new(parsed_url)
+local function connect(authority)
+  url = socket_url.parse(authority)
+  connection = http2_connection.new()
 
   copas.addthread(function()
     copas.sleep()
 
-    local https = connection.url.scheme == "https" and connection.tls
-    connection.client = copas.wrap(socket.tcp(), https)
-    connection.client:connect(connection.url.host, connection.url.port or 443)
+    local tls = url.scheme == "https" and connection.tls
+    connection.client = copas.wrap(socket.tcp(), tls)
+    connection.client:connect(url.host, url.port)
     connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
     -- we are permitted to do that (3.5)
     local stream = http2_stream.new(connection, 0)
@@ -158,8 +143,9 @@ local function connect(url)
     stream:encode_window_update("1073741823")
   end)
 
-  client = setmetatable({}, cmt)
-  return client
+  return {
+    on_connect = on_connect
+  }
 end
 
 local http2 = {

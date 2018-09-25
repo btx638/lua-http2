@@ -24,6 +24,7 @@ local function new(connection, id)
       end
     end
   else
+    conn.max_client_streamid = conn.max_client_streamid + 2
     stream.id = conn.max_client_streamid
   end
   conn.streams[stream.id] = stream

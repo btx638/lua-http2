@@ -38,21 +38,19 @@ function mt.__index:send_frame(ftype, flags, stream_id, payload)
   self.client:send(payload)
 end
 
-local function new(parsed_url)
+local function new()
   local connection = setmetatable({
-    responses = {},
-    data = {},
+    request = {},
+    on_response = {},
+    on_data = {},
     client = nil,
     tls = tls,
-    url = parsed_url,
     recv_server_preface = false,
-    stream_finished = nil,
     max_client_streamid = 1,
     max_server_streamid = 2,
     hpack_context = nil,
     server_settings = {},
     streams = {},
-    requests = 0,
     settings_parameters = settings_parameters,
     default_settings = default_settings,
     window = 65535,
