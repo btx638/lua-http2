@@ -1,155 +1,89 @@
-local http2_stream = require "http2.stream"
-local http2_connection = require "http2.connection"
+local connection = require "connection"
 local copas = require "copas"
 local socket = require "socket"
 local socket_url = require "socket.url"
 
 copas.autoclose = false
 
-local connection, client, url
+local conn = connection.new()
 
-local default_url = {
-  method = "GET",
-  scheme = "https",
-  path = '/',
-  port = 443
+local callbacks = {
+  on_response = {},
+  on_data = {},
+  on_close = {}
 }
 
-local function getframe(conn)
-  local header, payload, err
-  local length, ftype, flags, stream_id
-  header, err = conn.client:receive(9)
-  if err then return nil, err end
-  length, ftype, flags, stream_id = string.unpack(">I3BBI4", header)
-  payload, err = conn.client:receive(length)
-  if err then return nil, err end
-  stream_id = stream_id & 0x7fffffff
-  return {
-    ftype = ftype,
-    flags = flags,
-    stream_id = stream_id,
-    payload = payload
-  }
-end
-
--- todo: remove 'conn'
-local function receiver(conn)
-  local frame, err, stream, s0
+local function dispatcher()
+  local stream
   while true do
-    frame, err = getframe(conn)
-    --print(frame.ftype, frame.flags, frame.stream_id)
-    stream = conn.streams[frame.stream_id]
-    if stream == nil then 
-      conn.last_stream_id_server = frame.stream_id
-      stream = http2_stream.new(conn, frame.stream_id)
+    stream = conn:parse_stream()
+    if stream.state == "open" then
+      local on_response = callbacks.on_response[stream.id]
+      if on_response then
+        copas.wakeup(on_response)
+      end
     end
-    stream:parse_frame(frame.ftype, frame.flags, frame.payload)
-    -- todo: necessary?
-    if conn.recv_server_preface == false then
-      conn.recv_server_preface = true
-      copas.wakeup(conn.callback_connect)
-      copas.sleep(-1)
-    elseif stream.state == "open" then
-      copas.wakeup(conn.on_response[stream.id])
-    elseif stream.state == "half-closed (remote)" or stream.state == "closed" then
-      copas.wakeup(conn.on_data[stream.id])
-      stream:encode_rst_stream(0x0)
+    if stream.state == "closed" then
+      local on_data = callbacks.on_data[stream.id]
+      if on_data then
+        copas.wakeup(on_data)
+      end
+      break
     end
   end
 end
 
-local function on_error(callback)
-end
-
 local function request(headers, body)
-  local stream = http2_stream.new(connection)
+  local s = conn:new_stream()
+
+  local on_response = function(callback)
+    callbacks.on_response[s.id] = copas.addthread(function()
+      copas.sleep(-1)
+      local headers = table.remove(s.frames.headers, 1)
+      callback(headers)
+    end)
+  end
 
   local on_data = function(callback)
-    connection.on_data[stream.id] = copas.addthread(function()
+    callbacks.on_data[s.id] = copas.addthread(function()
       copas.sleep(-1)
-      local data = table.concat(stream.data)
+      local data = s.frames.data
       callback(data)
     end)
   end
 
-  local on_response = function(callback)
-    connection.on_response[stream.id] = copas.addthread(function()
-      copas.sleep(-1)
-      local headers = table.remove(stream.headers, 1)
-      local res = {headers = headers, on_data = on_data}
-      callback(res)
-    end)
+  if headers == nil then
+    headers = {}
+    table.insert(headers, {[":method"] = "GET"})
+    table.insert(headers, {[":path"] = conn.url.path or '/'})
+    table.insert(headers, {[":scheme"] = conn.url.scheme})
+    table.insert(headers, {[":authority"] = conn.url.authority})
   end
 
-  connection.request[#connection.request + 1] = copas.addthread(function()
-    copas.sleep(-1)
+  s:headers({headers = headers, end_stream = body == nil})
 
-    if headers == nil then
-      headers = {}
-      table.insert(headers, {[":method"] = url.method})
-      table.insert(headers, {[":path"] = url.path})
-      table.insert(headers, {[":scheme"] = url.scheme})
-      table.insert(headers, {[":authority"] = url.authority})
-      table.insert(headers, {["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36"})
-    end
-    stream:set_headers(headers, body == nil)
-    stream:encode_window_update("1073741823")
-    local req = table.remove(connection.request, 1)
-    if req then
-      copas.wakeup(req)
-    else
-      copas.wakeup(connection.receiver)
-    end
-  end)
-
-  return {
-    on_response = on_response
-  }
+  return {on_data = on_data, on_response = on_response}
 end
 
-local function on_connect(callback)
-  copas.addthread(function()
+local function on_connect(gurl, callback)
+  callbacks.dispatcher = copas.addthread(function()
     copas.sleep()
 
-    connection.callback_connect = copas.addthread(function()
-      copas.sleep(-1)
-      callback({request = request, on_error = on_error})
-      local req = table.remove(connection.request, 1)
-      copas.wakeup(req)
-    end)
-
-    connection.receiver = copas.addthread(function()
-      receiver(connection)
-    end)
+    conn.url = socket_url.parse(gurl)
+    conn.skt = copas.wrap(socket.tcp())
+    conn.skt:connect(conn.url.host, conn.url.port)
+    conn.skt:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+    conn:settings({settings = conn.default_settings, ack = false})
+    conn:parse_stream() -- error: not a server preface
+    callback({request = request})
+    dispatcher()
   end)
 
   copas.loop()
 end
 
-local function connect(authority)
-  url = socket_url.parse(authority)
-  connection = http2_connection.new()
-
-  copas.addthread(function()
-    copas.sleep()
-
-    local tls = url.scheme == "https" and connection.tls
-    connection.client = copas.wrap(socket.tcp(), tls)
-    connection.client:connect(url.host, url.port)
-    connection.client:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-    -- we are permitted to do that (3.5)
-    local stream = http2_stream.new(connection, 0)
-    stream:encode_settings(false)
-    stream:encode_window_update("1073741823")
-  end)
-
-  return {
-    on_connect = on_connect
-  }
-end
-
 local http2 = {
-  connect = connect,
+  on_connect = on_connect
 }
 
 return http2
