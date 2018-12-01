@@ -58,6 +58,7 @@ local function request(headers, body)
     table.insert(headers, {[":path"] = conn.url.path or '/'})
     table.insert(headers, {[":scheme"] = conn.url.scheme})
     table.insert(headers, {[":authority"] = conn.url.authority})
+    table.insert(headers, {["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Safari/537.36"})
   end
 
   s:headers({headers = headers, end_stream = body == nil})
@@ -65,16 +66,16 @@ local function request(headers, body)
   return {on_data = on_data, on_response = on_response}
 end
 
-local function on_connect(gurl, callback)
+local function on_connect(url, callback)
   callbacks.dispatcher = copas.addthread(function()
     copas.sleep()
 
-    conn.url = socket_url.parse(gurl)
-    conn.skt = copas.wrap(socket.tcp())
-    conn.skt:connect(conn.url.host, conn.url.port)
+    conn.url = socket_url.parse(url)
+    conn.skt = copas.wrap(socket.tcp(), conn.tls)
+    conn.skt:connect(conn.url.host, conn.url.port or 443)
     conn.skt:send("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
     conn:settings({settings = conn.default_settings, ack = false})
-    conn:parse_stream() -- error: not a server preface
+    conn:preface()
     callback({request = request})
     dispatcher()
   end)

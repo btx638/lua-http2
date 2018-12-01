@@ -21,6 +21,14 @@ local default_settings = {
   MAX_HEADER_LIST_SIZE   = 2^32 - 1
 }
 
+local tls =  {
+  mode = "client",
+  protocol = "any",
+  options = {"all", "no_sslv2", "no_sslv3"},
+  verify = "none",
+  alpn = "h2"
+}
+
 -- Settings indexed both as names and as hexadecimal identifiers
 for id = 0x1, 0x6 do
   settings_parameters[settings_parameters[id]] = id
@@ -44,7 +52,7 @@ function mt.__index:goaway(payload)
 end
 
 function mt.__index:parse_stream()
-  local frame = framer.decode(self.l, self.skt)
+  local frame = framer.decode(self.skt)
   --print(frame.type, frame.flags, frame.streamid)
   local s = self.streams[frame.streamid]
   if not s then
@@ -53,6 +61,11 @@ function mt.__index:parse_stream()
   end
   s:parse(frame)
   return s
+end
+
+function mt.__index:preface()
+  self:settings({settings = default_settings, ack = false})
+  self:parse_stream() -- error: not a server preface
 end
 
 function mt.__index:new_stream(identifier)
@@ -86,13 +99,12 @@ local function new(o)
     settings_parameters = settings_parameters,
     default_settings = default_settings,
     last_stream_id_server = 0,
-    recv_server_preface = false,
     header_block_fragment = nil,
+    tls = tls
   }, mt)
   return connection
 end
 
 return {
   new = new,
-  init = init
 }

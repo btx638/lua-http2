@@ -71,7 +71,7 @@ local function encode(frame)
   return header .. payload
 end
 
-local function decode(lock, buffer)
+local function decode(buffer)
   local header, err = buffer:receive(9)
   local length, type, flags, streamid = string.unpack(">I3BBI4", header)
   local payload = buffer:receive(length)
